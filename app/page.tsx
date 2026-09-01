@@ -1,52 +1,71 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Dashboard from "@/components/Dashboard";
-import NewSession from "@/components/NewSession";
+import NewSession, {
+  type Pair,
+} from "@/components/NewSession";
 import ActiveSession, {
-  Session,
-  Trade,
-  TradeResult,
+  type Session,
+  type Trade,
+  type TradeResult,
 } from "@/components/ActiveSession";
 import TradeHistory from "@/components/TradeHistory";
 import {
-  calculateLot,
-  LotCalculationResult,
-} from "@/lib/lot-calculator";
-import {
   calculateRisk,
-  RiskEngineResult,
+  type RiskEngineResult,
 } from "@/lib/risk-engine";
+import {
+  calculateLot,
+  type LotCalculationResult,
+} from "@/lib/lot-calculator";
 import {
   loadSession,
   saveSession,
   clearSession,
 } from "@/lib/storage";
 /* =========================================================
-   Types
+   Screen
 ========================================================= */
 type Screen =
   | "dashboard"
   | "new"
   | "active"
   | "history";
-type NewSessionData = {
-  balance: number;
-  target: number;
-  maxLoss: number;
-  baseRisk: number;
-  pair: string;
-  sl: number;
-  tp: number;
+/* =========================================================
+   New Session Form
+========================================================= */
+type SessionForm = {
+  balance: string;
+  target: string;
+  maxLoss: string;
+  risk: string;
+  pair: Pair;
+  sl: string;
+  tp: string;
 };
 /* =========================================================
-   Main App
+   Initial Form
 ========================================================= */
-export default function Home() {
+const INITIAL_FORM: SessionForm = {
+  balance: "1000",
+  target: "50",
+  maxLoss: "30",
+  risk: "1",
+  pair: "EUR/USD",
+  sl: "20",
+  tp: "40",
+};
+/* =========================================================
+   Main Page
+========================================================= */
+export default function Page() {
   const [screen, setScreen] =
     useState<Screen>("dashboard");
   const [session, setSession] =
     useState<Session | null>(null);
-  const [loaded, setLoaded] =
+  const [form, setForm] =
+    useState<SessionForm>(INITIAL_FORM);
+  const [ready, setReady] =
     useState(false);
   /* =======================================================
      Load saved session
@@ -54,22 +73,21 @@ export default function Home() {
   useEffect(() => {
     const saved = loadSession();
     if (saved) {
-      setSession(saved as Session);
-      if (saved.status === "active") {
-        setScreen("active");
-      }
+      setSession(saved);
     }
-    setLoaded(true);
+    setReady(true);
   }, []);
   /* =======================================================
-     Save session automatically
+     Save session
   ======================================================= */
   useEffect(() => {
-    if (!loaded || !session) {
+    if (!ready) {
       return;
     }
-    saveSession(session);
-  }, [session, loaded]);
+    if (session) {
+      saveSession(session);
+    }
+  }, [session, ready]);
   /* =======================================================
      Risk Engine
   ======================================================= */
@@ -79,36 +97,55 @@ export default function Home() {
         return null;
       }
       return calculateRisk({
-        balance: session.balance,
+        balance:
+          session.balance,
         startBalance:
           session.startBalance,
-        target: session.target,
-        maxLoss: session.maxLoss,
+        target:
+          session.target,
+        maxLoss:
+          session.maxLoss,
         baseRiskPercent:
           session.baseRisk,
-        trades: session.trades.map(
-          (trade) => trade.result
-        ),
+        trades:
+          session.trades.map(
+            (trade) => trade.result
+          ),
       });
     }, [session]);
   /* =======================================================
      Lot Calculator
   ======================================================= */
-  const lotCalculation:
+  const recommendation:
     | LotCalculationResult
     | null = useMemo(() => {
     if (!session || !risk) {
       return null;
     }
     if (!risk.shouldTrade) {
-      return null;
+      return {
+        lot: 0,
+        riskMoney: 0,
+        stopLossPips: session.sl,
+        pipValuePerLot: 10,
+        theoreticalLot: 0,
+        potentialProfit: 0,
+        isValid: false,
+      };
     }
     return calculateLot({
-      balance: session.balance,
+      balance:
+        session.balance,
       riskPercent:
         risk.currentRiskPercent,
       stopLossPips:
         session.sl,
+      /*
+       * قيمة تقريبية للوت القياسي.
+       *
+       * سيتم تحسينها لاحقًا لتصبح
+       * مرتبطة بالزوج وعملة الحساب.
+       */
       pipValuePerStandardLot: 10,
       minLot: 0.01,
       maxLot: 100,
@@ -116,66 +153,156 @@ export default function Home() {
     });
   }, [session, risk]);
   /* =======================================================
-     Create New Session
+     Create Session
   ======================================================= */
-  function handleCreateSession(
-    data: NewSessionData
-  ) {
+  function handleStartSession() {
+    const balance =
+      Number(form.balance);
+    const target =
+      Number(form.target);
+    const maxLoss =
+      Number(form.maxLoss);
+    const baseRisk =
+      Number(form.risk);
+    const sl =
+      Number(form.sl);
+    const tp =
+      Number(form.tp);
+    /* ---------------------------------------------
+       Validation
+    --------------------------------------------- */
+    if (
+      !Number.isFinite(balance) ||
+      balance <= 0
+    ) {
+      return;
+    }
+    if (
+      !Number.isFinite(target) ||
+      target <= 0
+    ) {
+      return;
+    }
+    if (
+      !Number.isFinite(maxLoss) ||
+      maxLoss <= 0
+    ) {
+      return;
+    }
+    if (
+      !Number.isFinite(baseRisk) ||
+      baseRisk <= 0
+    ) {
+      return;
+    }
+    if (
+      !Number.isFinite(sl) ||
+      sl <= 0
+    ) {
+      return;
+    }
+    if (
+      !Number.isFinite(tp) ||
+      tp <= 0
+    ) {
+      return;
+    }
+    /* ---------------------------------------------
+       Create session
+    --------------------------------------------- */
     const newSession: Session = {
-      balance: data.balance,
-      startBalance: data.balance,
-      target: data.target,
-      maxLoss: data.maxLoss,
-      baseRisk: data.baseRisk,
-      pair: data.pair,
-      sl: data.sl,
-      tp: data.tp,
+      balance,
+      startBalance:
+        balance,
+      target,
+      maxLoss,
+      baseRisk,
+      pair:
+        form.pair,
+      sl,
+      tp,
       trades: [],
       createdAt:
         new Date().toISOString(),
       status: "active",
     };
-    setSession(newSession);
+    setSession(
+      newSession
+    );
     setScreen("active");
   }
   /* =======================================================
-     Register Trade Result
+     Update Form
+  ======================================================= */
+  function updateForm(
+    patch: Partial<SessionForm>
+  ) {
+    setForm(
+      (current) => ({
+        ...current,
+        ...patch,
+      })
+    );
+  }
+  /* =======================================================
+     Register WIN / LOSS
   ======================================================= */
   function handleTradeResult(
     result: TradeResult
   ) {
-    if (!session || !lotCalculation) {
+    if (
+      !session ||
+      !risk ||
+      !recommendation
+    ) {
       return;
     }
-    if (risk && !risk.shouldTrade) {
+    if (
+      !risk.shouldTrade
+    ) {
+      return;
+    }
+    if (
+      !recommendation.isValid
+    ) {
       return;
     }
     const lot =
-      lotCalculation.lot;
+      recommendation.lot;
     const riskMoney =
-      lotCalculation.riskMoney;
+      recommendation.riskMoney;
     /*
-     * الربح/الخسارة هنا محسوب بطريقة
-     * مبسطة للنسخة التجريبية.
-     *
-     * WIN:
-     * TP × Pip Value × Lot
-     *
-     * LOSS:
-     * SL × Pip Value × Lot
+     * النسخة الحالية تستخدم قيمة Pip
+     * تقريبية للوت القياسي.
      */
     const pipValue =
       10;
+    /* ---------------------------------------------
+       Calculate P&L
+    --------------------------------------------- */
     const pnl =
       result === "WIN"
         ? lot *
           session.tp *
           pipValue
-        : -(
-            lot *
-            session.sl *
-            pipValue
-          );
+        : -riskMoney;
+    const safePnl =
+      Number(
+        pnl.toFixed(2)
+      );
+    /* ---------------------------------------------
+       New balance
+    --------------------------------------------- */
+    const newBalance =
+      Number(
+        (
+          session.balance +
+          safePnl
+        ).toFixed(2)
+      );
+    /* ---------------------------------------------
+       Create trade
+    --------------------------------------------- */
     const trade: Trade = {
       id:
         session.trades.length + 1,
@@ -189,7 +316,7 @@ export default function Home() {
         session.tp,
       result,
       pnl:
-        Number(pnl.toFixed(2)),
+        safePnl,
       time:
         new Date().toLocaleTimeString(
           "ar-DZ",
@@ -199,21 +326,16 @@ export default function Home() {
           }
         ),
     };
-    const newBalance =
-      Number(
-        (
-          session.balance +
-          pnl
-        ).toFixed(2)
-      );
-    const updatedTrades = [
+    /* ---------------------------------------------
+       Add trade
+    --------------------------------------------- */
+    const trades = [
       ...session.trades,
       trade,
     ];
-    /*
-     * نحسب حالة المخاطر الجديدة
-     * بعد تسجيل الصفقة.
-     */
+    /* ---------------------------------------------
+       Calculate next risk
+    --------------------------------------------- */
     const nextRisk =
       calculateRisk({
         balance:
@@ -227,20 +349,42 @@ export default function Home() {
         baseRiskPercent:
           session.baseRisk,
         trades:
-          updatedTrades.map(
+          trades.map(
             (item) => item.result
           ),
       });
+    /* ---------------------------------------------
+       Determine session status
+    --------------------------------------------- */
+    const profit =
+      newBalance -
+      session.startBalance;
+    const loss =
+      session.startBalance -
+      newBalance;
+    const targetReached =
+      profit >= session.target;
+    const maxLossReached =
+      loss >= session.maxLoss;
+    const completed =
+      targetReached ||
+      maxLossReached ||
+      !nextRisk.shouldTrade;
+    /* ---------------------------------------------
+       Update session
+    --------------------------------------------- */
     const updatedSession: Session = {
       ...session,
       balance:
-        newBalance,
-      trades:
-        updatedTrades,
+        Math.max(
+          0,
+          newBalance
+        ),
+      trades,
       status:
-        nextRisk.shouldTrade
-          ? "active"
-          : "complete",
+        completed
+          ? "complete"
+          : "active",
     };
     setSession(
       updatedSession
@@ -253,17 +397,30 @@ export default function Home() {
     setScreen("new");
   }
   /* =======================================================
-     Clear Current Session
+     Continue Session
+  ======================================================= */
+  function handleContinue() {
+    if (!session) {
+      setScreen("new");
+      return;
+    }
+    setScreen("active");
+  }
+  /* =======================================================
+     Clear Session
   ======================================================= */
   function handleClearSession() {
     clearSession();
     setSession(null);
+    setForm(
+      INITIAL_FORM
+    );
     setScreen("dashboard");
   }
   /* =======================================================
      Loading
   ======================================================= */
-  if (!loaded) {
+  if (!ready) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#07090d] text-white">
         <div className="text-center">
@@ -276,17 +433,21 @@ export default function Home() {
     );
   }
   /* =======================================================
-     Dashboard
+     DASHBOARD
   ======================================================= */
-  if (screen === "dashboard") {
+  if (
+    screen === "dashboard"
+  ) {
     return (
       <Dashboard
-        session={session}
+        session={
+          session
+        }
         onNewSession={
           handleNewSession
         }
-        onContinue={() =>
-          setScreen("active")
+        onContinue={
+          handleContinue
         }
         onHistory={() =>
           setScreen("history")
@@ -295,11 +456,69 @@ export default function Home() {
     );
   }
   /* =======================================================
-     New Session
+     NEW SESSION
   ======================================================= */
-  if (screen === "new") {
+  if (
+    screen === "new"
+  ) {
     return (
       <NewSession
+        balance={
+          form.balance
+        }
+        setBalance={(value) =>
+          updateForm({
+            balance: value,
+          })
+        }
+        target={
+          form.target
+        }
+        setTarget={(value) =>
+          updateForm({
+            target: value,
+          })
+        }
+        maxLoss={
+          form.maxLoss
+        }
+        setMaxLoss={(value) =>
+          updateForm({
+            maxLoss: value,
+          })
+        }
+        risk={
+          form.risk
+        }
+        setRisk={(value) =>
+          updateForm({
+            risk: value,
+          })
+        }
+        pair={
+          form.pair
+        }
+        setPair={(value) =>
+          updateForm({
+            pair: value,
+          })
+        }
+        sl={
+          form.sl
+        }
+        setSl={(value) =>
+          updateForm({
+            sl: value,
+          })
+        }
+        tp={
+          form.tp
+        }
+        setTp={(value) =>
+          updateForm({
+            tp: value,
+          })
+        }
         onBack={() =>
           setScreen(
             session
@@ -307,19 +526,23 @@ export default function Home() {
               : "dashboard"
           )
         }
-        onCreate={
-          handleCreateSession
+        onStart={
+          handleStartSession
         }
       />
     );
   }
   /* =======================================================
-     Trade History
+     TRADE HISTORY
   ======================================================= */
-  if (screen === "history") {
+  if (
+    screen === "history"
+  ) {
     return (
       <TradeHistory
-        session={session}
+        session={
+          session
+        }
         onBack={() =>
           setScreen(
             session
@@ -334,13 +557,13 @@ export default function Home() {
     );
   }
   /* =======================================================
-     Active Session
+     ACTIVE SESSION
   ======================================================= */
   if (
     screen === "active" &&
     session &&
     risk &&
-    lotCalculation
+    recommendation
   ) {
     return (
       <ActiveSession
@@ -352,13 +575,11 @@ export default function Home() {
         }
         recommendation={{
           lot:
-            lotCalculation.lot,
+            recommendation.lot,
           riskMoney:
-            lotCalculation.riskMoney,
+            recommendation.riskMoney,
           potential:
-            lotCalculation.lot *
-            session.tp *
-            10,
+            recommendation.potentialProfit,
         }}
         onBack={() =>
           setScreen("dashboard")
@@ -376,59 +597,27 @@ export default function Home() {
     );
   }
   /* =======================================================
-     Session exists but trading stopped
-     ======================================================= */
-  if (
-    screen === "active" &&
-    session &&
-    risk &&
-    !risk.shouldTrade
-  ) {
-    return (
-      <ActiveSession
-        session={{
-          ...session,
-          status: "complete",
-        }}
-        riskPct={
-          risk.currentRiskPercent
-        }
-        recommendation={{
-          lot: 0,
-          riskMoney: 0,
-          potential: 0,
-        }}
-        onBack={() =>
-          setScreen("dashboard")
-        }
-        onResult={() => {}}
-        onHistory={() =>
-          setScreen("history")
-        }
-        onNewSession={
-          handleNewSession
-        }
-      />
-    );
-  }
-  /* =======================================================
-     Fallback
+     FALLBACK
   ======================================================= */
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#07090d] px-5 text-white">
-      <div className="w-full max-w-md rounded-3xl border border-white/[0.08] bg-[#0f1319] p-6 text-center">
-        <h1 className="text-lg font-black">
-          Forex Risk Manager
+      <div className="w-full max-w-md rounded-[28px] border border-white/[0.08] bg-[#0f1319] p-6 text-center">
+        <div className="text-[10px] font-bold tracking-[0.25em] text-emerald-400">
+          FOREX RISK
+        </div>
+        <h1 className="mt-3 text-xl font-black">
+          لا توجد جلسة نشطة
         </h1>
         <p className="mt-2 text-xs leading-5 text-white/35">
-          لا توجد جلسة تداول نشطة.
+          ابدأ جلسة جديدة لحساب
+          حجم المخاطرة واللوت.
         </p>
         <button
           type="button"
           onClick={
             handleNewSession
           }
-          className="mt-5 h-12 w-full rounded-2xl bg-emerald-400 text-sm font-black text-black"
+          className="mt-6 h-13 w-full rounded-2xl bg-emerald-400 text-sm font-black text-[#04120c]"
         >
           إنشاء جلسة جديدة
         </button>
