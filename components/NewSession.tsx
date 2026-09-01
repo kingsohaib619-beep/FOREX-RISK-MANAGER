@@ -3,16 +3,13 @@ import {
   ArrowLeft,
   ChevronDown,
   ShieldCheck,
+  Wallet,
+  TrendingUp,
+  BarChart3,
 } from "lucide-react";
-export type Pair =
-  | "EUR/USD"
-  | "GBP/USD"
-  | "USD/JPY"
-  | "USD/CHF"
-  | "AUD/USD"
-  | "USD/CAD"
-  | "NZD/USD"
-  | "EUR/GBP";
+/* =========================================================
+   Account Types
+========================================================= */
 export type AccountType =
   | "QT_REAL"
   | "QT_DEMO"
@@ -23,30 +20,64 @@ export type AccountType =
   | "MT4_DEMO"
   | "SHARES_REAL"
   | "SHARES_DEMO";
+/* =========================================================
+   Pair
+========================================================= */
+export type Pair =
+  | "EUR/USD"
+  | "GBP/USD"
+  | "USD/JPY"
+  | "USD/CHF"
+  | "AUD/USD"
+  | "USD/CAD"
+  | "NZD/USD"
+  | "EUR/GBP";
+/* =========================================================
+   Props
+========================================================= */
 type NewSessionProps = {
   accountType: AccountType;
   setAccountType: (
     value: AccountType
   ) => void;
   balance: string;
-  setBalance: (value: string) => void;
+  setBalance: (
+    value: string
+  ) => void;
   target: string;
-  setTarget: (value: string) => void;
+  setTarget: (
+    value: string
+  ) => void;
   maxLoss: string;
-  setMaxLoss: (value: string) => void;
+  setMaxLoss: (
+    value: string
+  ) => void;
   risk: string;
-  setRisk: (value: string) => void;
+  setRisk: (
+    value: string
+  ) => void;
   pair: Pair;
-  setPair: (value: Pair) => void;
+  setPair: (
+    value: Pair
+  ) => void;
   sl: string;
-  setSl: (value: string) => void;
+  setSl: (
+    value: string
+  ) => void;
   tp: string;
-  setTp: (value: string) => void;
+  setTp: (
+    value: string
+  ) => void;
   payout: string;
-  setPayout: (value: string) => void;
+  setPayout: (
+    value: string
+  ) => void;
   onBack: () => void;
   onStart: () => void;
 };
+/* =========================================================
+   Data
+========================================================= */
 const PAIRS: Pair[] = [
   "EUR/USD",
   "GBP/USD",
@@ -64,57 +95,63 @@ const RISK_OPTIONS = [
   "2",
   "3",
 ];
-const ACCOUNT_OPTIONS: {
+/* =========================================================
+   Account Groups
+========================================================= */
+const POCKET_OPTIONS: {
   value: AccountType;
   label: string;
-  group: string;
 }[] = [
   {
     value: "QT_REAL",
     label: "QT Real",
-    group: "Pocket Option",
   },
   {
     value: "QT_DEMO",
     label: "QT Demo",
-    group: "Pocket Option",
   },
   {
     value: "TOURNAMENT",
     label: "Tournament",
-    group: "Pocket Option",
   },
+];
+const FOREX_OPTIONS: {
+  value: AccountType;
+  label: string;
+}[] = [
   {
     value: "MT5_REAL",
     label: "Forex MT5 Real",
-    group: "Forex",
   },
   {
     value: "MT5_DEMO",
     label: "Forex MT5 Demo",
-    group: "Forex",
   },
   {
     value: "MT4_REAL",
     label: "Forex MT4 Real",
-    group: "Forex",
   },
   {
     value: "MT4_DEMO",
     label: "Forex MT4 Demo",
-    group: "Forex",
   },
+];
+const SHARES_OPTIONS: {
+  value: AccountType;
+  label: string;
+}[] = [
   {
     value: "SHARES_REAL",
     label: "Shares Real",
-    group: "Shares",
   },
   {
     value: "SHARES_DEMO",
     label: "Shares Demo",
-    group: "Shares",
   },
 ];
+/* =========================================================
+   Helpers
+========================================================= */
 function isPocketOption(
   accountType: AccountType
 ) {
@@ -142,6 +179,9 @@ function isShares(
     accountType === "SHARES_DEMO"
   );
 }
+/* =========================================================
+   Component
+========================================================= */
 export default function NewSession({
   accountType,
   setAccountType,
@@ -164,6 +204,9 @@ export default function NewSession({
   onBack,
   onStart,
 }: NewSessionProps) {
+  /* -------------------------------------------------------
+     Numbers
+  ------------------------------------------------------- */
   const balanceNumber =
     Number(balance);
   const targetNumber =
@@ -178,39 +221,79 @@ export default function NewSession({
     Number(tp);
   const payoutNumber =
     Number(payout);
-  const isQT =
+  /* -------------------------------------------------------
+     Account Type
+  ------------------------------------------------------- */
+  const pocket =
     isPocketOption(
       accountType
     );
-  const isForexAccount =
+  const forex =
     isForex(
       accountType
     );
-  const isSharesAccount =
+  const shares =
     isShares(
       accountType
     );
-  const isValid =
+  /* -------------------------------------------------------
+     Validation
+  ------------------------------------------------------- */
+  const basicValid =
+    Number.isFinite(
+      balanceNumber
+    ) &&
     balanceNumber > 0 &&
+    Number.isFinite(
+      targetNumber
+    ) &&
     targetNumber > 0 &&
+    Number.isFinite(
+      maxLossNumber
+    ) &&
     maxLossNumber > 0 &&
-    riskNumber > 0 &&
-    slNumber > 0 &&
-    tpNumber > 0 &&
+    Number.isFinite(
+      riskNumber
+    ) &&
+    riskNumber > 0;
+  const forexValid =
+    !forex ||
     (
-      !isQT ||
-      (
-        payoutNumber > 0 &&
-        payoutNumber <= 100
-      )
+      Number.isFinite(
+        slNumber
+      ) &&
+      slNumber > 0 &&
+      Number.isFinite(
+        tpNumber
+      ) &&
+      tpNumber > 0
     );
+  const pocketValid =
+    !pocket ||
+    (
+      Number.isFinite(
+        payoutNumber
+      ) &&
+      payoutNumber > 0 &&
+      payoutNumber <= 100
+    );
+  const isValid =
+    basicValid &&
+    forexValid &&
+    pocketValid;
+  /* -------------------------------------------------------
+     Risk Amount
+  ------------------------------------------------------- */
   const riskAmount =
     balanceNumber > 0 &&
     riskNumber > 0
       ? balanceNumber *
         (riskNumber / 100)
       : 0;
-  const riskToTarget =
+  /* -------------------------------------------------------
+     Target %
+  ------------------------------------------------------- */
+  const targetPercent =
     balanceNumber > 0 &&
     targetNumber > 0
       ? (
@@ -218,21 +301,33 @@ export default function NewSession({
           balanceNumber
         ) * 100
       : 0;
+  /* -------------------------------------------------------
+     Risk / Reward
+  ------------------------------------------------------- */
   const rr =
     slNumber > 0 &&
     tpNumber > 0
       ? tpNumber / slNumber
       : 0;
-  const selectedAccount =
-    ACCOUNT_OPTIONS.find(
-      (item) =>
-        item.value ===
-        accountType
-    );
+  /* -------------------------------------------------------
+     QT Potential Profit
+  ------------------------------------------------------- */
+  const qtProfit =
+    pocket &&
+    riskAmount > 0 &&
+    payoutNumber > 0
+      ? riskAmount *
+        (payoutNumber / 100)
+      : 0;
+  /* =======================================================
+     Render
+  ======================================================= */
   return (
     <div className="min-h-screen bg-[#07090d] text-white">
       <div className="mx-auto min-h-screen max-w-md bg-[#0b0e13]">
-        {/* Header */}
+        {/* =================================================
+            Header
+        ================================================= */}
         <header className="flex items-center justify-between px-5 pb-5 pt-6">
           <button
             type="button"
@@ -240,11 +335,13 @@ export default function NewSession({
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.03]"
             aria-label="رجوع"
           >
-            <ArrowLeft size={19} />
+            <ArrowLeft
+              size={19}
+            />
           </button>
           <div className="text-center">
             <div className="text-[10px] font-bold tracking-[0.24em] text-emerald-400">
-              FOREX RISK
+              RISK MANAGER
             </div>
             <h1 className="mt-1 text-base font-bold">
               جلسة جديدة
@@ -253,166 +350,185 @@ export default function NewSession({
           <div className="w-10" />
         </header>
         <main className="px-5 pb-10">
-          {/* Intro */}
+          {/* =================================================
+              Intro
+          ================================================= */}
           <div className="mb-5">
             <h2 className="text-2xl font-black">
               إعداد جلسة التداول
             </h2>
             <p className="mt-2 text-sm leading-6 text-white/40">
-              اختر نوع الحساب أولًا، ثم أدخل
-              رأس المال وحدود المخاطرة.
+              اختر نوع الحساب أولًا، وسيتم تغيير
+              طريقة الحساب تلقائيًا حسب المنصة.
             </p>
           </div>
-          {/* Account Type */}
+          {/* =================================================
+              Account Type
+          ================================================= */}
           <section className="rounded-[24px] border border-emerald-400/10 bg-[#0f1319] p-5">
             <SectionTitle>
               نوع حساب التداول
             </SectionTitle>
-            <div className="relative">
-              <select
-                value={
-                  accountType
-                }
-                onChange={(event) =>
-                  setAccountType(
-                    event.target
-                      .value as AccountType
+            {/* Pocket Option */}
+            <AccountGroup
+              title="Pocket Option"
+              icon={
+                <Wallet
+                  size={17}
+                />
+              }
+            >
+              <div className="grid grid-cols-3 gap-2">
+                {POCKET_OPTIONS.map(
+                  (item) => (
+                    <AccountButton
+                      key={
+                        item.value
+                      }
+                      active={
+                        accountType ===
+                        item.value
+                      }
+                      onClick={() =>
+                        setAccountType(
+                          item.value
+                        )
+                      }
+                    >
+                      {item.label}
+                    </AccountButton>
                   )
-                }
-                className="h-14 w-full appearance-none rounded-xl border border-white/[0.08] bg-[#0b0f14] px-4 pl-10 text-sm font-bold text-white outline-none"
-              >
-                <optgroup
-                  label="Pocket Option"
-                >
-                  {ACCOUNT_OPTIONS
-                    .filter(
-                      (item) =>
-                        item.group ===
-                        "Pocket Option"
-                    )
-                    .map(
-                      (item) => (
-                        <option
-                          key={
-                            item.value
-                          }
-                          value={
-                            item.value
-                          }
-                          className="bg-[#0b0f14]"
-                        >
-                          {
-                            item.label
-                          }
-                        </option>
-                      )
-                    )}
-                </optgroup>
-                <optgroup
-                  label="Forex"
-                >
-                  {ACCOUNT_OPTIONS
-                    .filter(
-                      (item) =>
-                        item.group ===
-                        "Forex"
-                    )
-                    .map(
-                      (item) => (
-                        <option
-                          key={
-                            item.value
-                          }
-                          value={
-                            item.value
-                          }
-                          className="bg-[#0b0f14]"
-                        >
-                          {
-                            item.label
-                          }
-                        </option>
-                      )
-                    )}
-                </optgroup>
-                <optgroup
-                  label="Shares"
-                >
-                  {ACCOUNT_OPTIONS
-                    .filter(
-                      (item) =>
-                        item.group ===
-                        "Shares"
-                    )
-                    .map(
-                      (item) => (
-                        <option
-                          key={
-                            item.value
-                          }
-                          value={
-                            item.value
-                          }
-                          className="bg-[#0b0f14]"
-                        >
-                          {
-                            item.label
-                          }
-                        </option>
-                      )
-                    )}
-                </optgroup>
-              </select>
-              <ChevronDown
-                size={17}
-                className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/30"
-              />
-            </div>
-            <div className="mt-3 rounded-xl bg-emerald-400/[0.04] px-4 py-3">
-              <div className="text-[10px] text-white/30">
-                الحساب المحدد
+                )}
               </div>
-              <div className="mt-1 text-sm font-bold text-emerald-400">
-                {
-                  selectedAccount?.label
-                }
+            </AccountGroup>
+            {/* Forex */}
+            <AccountGroup
+              title="Forex"
+              icon={
+                <TrendingUp
+                  size={17}
+                />
+              }
+              className="mt-5"
+            >
+              <div className="grid grid-cols-2 gap-2">
+                {FOREX_OPTIONS.map(
+                  (item) => (
+                    <AccountButton
+                      key={
+                        item.value
+                      }
+                      active={
+                        accountType ===
+                        item.value
+                      }
+                      onClick={() =>
+                        setAccountType(
+                          item.value
+                        )
+                      }
+                    >
+                      {item.label}
+                    </AccountButton>
+                  )
+                )}
+              </div>
+            </AccountGroup>
+            {/* Shares */}
+            <AccountGroup
+              title="Shares"
+              icon={
+                <BarChart3
+                  size={17}
+                />
+              }
+              className="mt-5"
+            >
+              <div className="grid grid-cols-2 gap-2">
+                {SHARES_OPTIONS.map(
+                  (item) => (
+                    <AccountButton
+                      key={
+                        item.value
+                      }
+                      active={
+                        accountType ===
+                        item.value
+                      }
+                      onClick={() =>
+                        setAccountType(
+                          item.value
+                        )
+                      }
+                    >
+                      {item.label}
+                    </AccountButton>
+                  )
+                )}
+              </div>
+            </AccountGroup>
+            {/* Selected */}
+            <div className="mt-5 rounded-2xl border border-white/[0.06] bg-white/[0.025] px-4 py-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-white/35">
+                  الحساب المحدد
+                </span>
+                <strong className="text-sm text-emerald-400">
+                  {getAccountLabel(
+                    accountType
+                  )}
+                </strong>
               </div>
             </div>
           </section>
-          {/* Capital */}
+          {/* =================================================
+              Capital
+          ================================================= */}
           <section className="mt-4 rounded-[24px] border border-white/[0.07] bg-[#0f1319] p-5">
             <SectionTitle>
               رأس المال والأهداف
             </SectionTitle>
             <MoneyInput
               label="رأس المال"
-              value={balance}
-              onChange={setBalance}
+              value={
+                balance
+              }
+              onChange={
+                setBalance
+              }
               placeholder="1000"
             />
             <div className="mt-4 grid grid-cols-2 gap-3">
               <MoneyInput
                 label="الهدف"
-                value={target}
-                onChange={setTarget}
+                value={
+                  target
+                }
+                onChange={
+                  setTarget
+                }
                 placeholder="50"
               />
               <MoneyInput
                 label="أقصى خسارة"
-                value={maxLoss}
-                onChange={setMaxLoss}
+                value={
+                  maxLoss
+                }
+                onChange={
+                  setMaxLoss
+                }
                 placeholder="30"
               />
             </div>
-            {balanceNumber > 0 && (
+            {balanceNumber >
+              0 && (
               <div className="mt-4 rounded-2xl bg-white/[0.025] p-4">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-white/35">
-                    المخاطرة عند النسبة الحالية
+                    مبلغ المخاطرة
                   </span>
                   <strong className="text-emerald-400">
-                    $
-                    {riskAmount.toFixed(
+                    ${riskAmount.toFixed(
                       2
                     )}
                   </strong>
@@ -422,7 +538,7 @@ export default function NewSession({
                     الهدف كنسبة
                   </span>
                   <strong>
-                    {riskToTarget.toFixed(
+                    {targetPercent.toFixed(
                       2
                     )}
                     %
@@ -431,14 +547,16 @@ export default function NewSession({
               </div>
             )}
           </section>
-          {/* Risk */}
+          {/* =================================================
+              Risk
+          ================================================= */}
           <section className="mt-4 rounded-[24px] border border-white/[0.07] bg-[#0f1319] p-5">
             <SectionTitle>
               مستوى المخاطرة
             </SectionTitle>
             <p className="mb-4 text-xs leading-5 text-white/35">
-              اختر أقصى نسبة من الرصيد
-              تخاطر بها في الصفقة.
+              النسبة التي سيتم المخاطرة بها
+              من رصيد الحساب في الصفقة.
             </p>
             <div className="grid grid-cols-5 gap-2">
               {RISK_OPTIONS.map(
@@ -469,7 +587,8 @@ export default function NewSession({
                 }
               )}
             </div>
-            {riskNumber >= 3 && (
+            {riskNumber >=
+              3 && (
               <div className="mt-4 flex gap-3 rounded-2xl border border-yellow-400/10 bg-yellow-400/[0.04] p-4">
                 <ShieldCheck
                   size={18}
@@ -477,40 +596,83 @@ export default function NewSession({
                 />
                 <p className="text-[11px] leading-5 text-white/45">
                   نسبة المخاطرة مرتفعة
-                  نسبيًا. يفضل استخدام
-                  نسبة أقل للحفاظ على
-                  رأس المال.
+                  نسبيًا. استخدمها فقط
+                  إذا كانت متوافقة مع
+                  خطة إدارة رأس المال.
                 </p>
               </div>
             )}
           </section>
-          {/* QT */}
-          {isQT && (
+          {/* =================================================
+              Pocket Option Setup
+          ================================================= */}
+          {pocket && (
             <section className="mt-4 rounded-[24px] border border-white/[0.07] bg-[#0f1319] p-5">
               <SectionTitle>
                 إعداد Pocket Option
               </SectionTitle>
               <p className="mb-4 text-xs leading-5 text-white/35">
-                استخدم نسبة العائد التي
-                تعرضها المنصة للأصل
-                قبل فتح الصفقة.
+                في Pocket Option يتم حساب
+                مبلغ الصفقة والربح المتوقع
+                بناءً على نسبة الـ Payout.
               </p>
               <NumberInput
                 label="Payout"
-                value={payout}
-                onChange={setPayout}
+                value={
+                  payout
+                }
+                onChange={
+                  setPayout
+                }
                 suffix="%"
                 placeholder="92"
               />
-              <div className="mt-3 rounded-xl bg-white/[0.025] p-3 text-[10px] leading-5 text-white/30">
-                مثال: إذا كان Payout
-                92%، فإن ربح صفقة رابحة
-                يساوي 92% من مبلغ الصفقة.
-              </div>
+              {payoutNumber >
+                0 &&
+                riskAmount >
+                  0 && (
+                  <div className="mt-4 rounded-2xl bg-white/[0.025] p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-white/35">
+                        مبلغ الصفقة
+                      </span>
+                      <strong className="text-sm">
+                        $
+                        {riskAmount.toFixed(
+                          2
+                        )}
+                      </strong>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between">
+                      <span className="text-xs text-white/35">
+                        الربح عند WIN
+                      </span>
+                      <strong className="text-sm text-emerald-400">
+                        $
+                        {qtProfit.toFixed(
+                          2
+                        )}
+                      </strong>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between">
+                      <span className="text-xs text-white/35">
+                        الخسارة عند LOSS
+                      </span>
+                      <strong className="text-sm text-red-400">
+                        -$
+                        {riskAmount.toFixed(
+                          2
+                        )}
+                      </strong>
+                    </div>
+                  </div>
+                )}
             </section>
           )}
-          {/* Forex */}
-          {isForexAccount && (
+          {/* =================================================
+              Forex Setup
+          ================================================= */}
+          {forex && (
             <section className="mt-4 rounded-[24px] border border-white/[0.07] bg-[#0f1319] p-5">
               <SectionTitle>
                 إعداد Forex
@@ -521,17 +683,24 @@ export default function NewSession({
                 </span>
                 <div className="relative">
                   <select
-                    value={pair}
-                    onChange={(event) =>
+                    value={
+                      pair
+                    }
+                    onChange={(
+                      event
+                    ) =>
                       setPair(
-                        event.target
+                        event
+                          .target
                           .value as Pair
                       )
                     }
                     className="h-13 w-full appearance-none rounded-xl border border-white/[0.08] bg-[#0b0f14] px-4 pl-10 text-sm font-bold text-white outline-none"
                   >
                     {PAIRS.map(
-                      (item) => (
+                      (
+                        item
+                      ) => (
                         <option
                           key={
                             item
@@ -555,15 +724,23 @@ export default function NewSession({
               <div className="mt-4 grid grid-cols-2 gap-3">
                 <NumberInput
                   label="Stop Loss"
-                  value={sl}
-                  onChange={setSl}
+                  value={
+                    sl
+                  }
+                  onChange={
+                    setSl
+                  }
                   suffix="Pips"
                   placeholder="20"
                 />
                 <NumberInput
                   label="Take Profit"
-                  value={tp}
-                  onChange={setTp}
+                  value={
+                    tp
+                  }
+                  onChange={
+                    setTp
+                  }
                   suffix="Pips"
                   placeholder="40"
                 />
@@ -583,36 +760,38 @@ export default function NewSession({
               )}
             </section>
           )}
-          {/* Shares */}
-          {isSharesAccount && (
+          {/* =================================================
+              Shares Setup
+          ================================================= */}
+          {shares && (
             <section className="mt-4 rounded-[24px] border border-white/[0.07] bg-[#0f1319] p-5">
               <SectionTitle>
-                إعداد Shares
+                إعداد الأسهم
               </SectionTitle>
               <p className="text-xs leading-5 text-white/35">
-                يتم حساب حجم المركز
-                بناءً على المبلغ الذي
-                تريد المخاطرة به.
+                حساب الأسهم يعتمد على مبلغ
+                المخاطرة وليس على Forex Lots.
+                سيتم لاحقًا استخدام سعر الدخول
+                ووقف الخسارة لحساب عدد الأسهم.
               </p>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <NumberInput
-                  label="Stop Loss"
-                  value={sl}
-                  onChange={setSl}
-                  suffix="%"
-                  placeholder="2"
-                />
-                <NumberInput
-                  label="Take Profit"
-                  value={tp}
-                  onChange={setTp}
-                  suffix="%"
-                  placeholder="4"
-                />
+              <div className="mt-4 rounded-2xl border border-yellow-400/10 bg-yellow-400/[0.03] p-4">
+                <div className="flex gap-3">
+                  <ShieldCheck
+                    size={18}
+                    className="mt-0.5 shrink-0 text-yellow-400"
+                  />
+                  <p className="text-[11px] leading-5 text-white/45">
+                    أدخل بيانات السهم ووقف الخسارة
+                    عند إضافة الصفقة الفعلية.
+                    هذا يمنع حساب عدد أسهم غير دقيق.
+                  </p>
+                </div>
               </div>
             </section>
           )}
-          {/* Summary */}
+          {/* =================================================
+              Summary
+          ================================================= */}
           <section className="mt-4 rounded-[24px] border border-emerald-400/10 bg-emerald-400/[0.035] p-5">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-400/10">
@@ -626,13 +805,11 @@ export default function NewSession({
                   ملخص الجلسة
                 </div>
                 <div className="mt-1 text-[11px] text-white/35">
-                  {
-                    selectedAccount?.label
-                  }
-                  {" · "}
-                  {pair}
-                  {" · "}
-                  مخاطرة {risk}%
+                  {getAccountLabel(
+                    accountType
+                  )}{" "}
+                  · مخاطرة{" "}
+                  {risk}%
                 </div>
               </div>
             </div>
@@ -661,30 +838,33 @@ export default function NewSession({
               />
               <SummaryItem
                 label={
-                  isQT
+                  pocket
                     ? "Payout"
-                    : "SL"
+                    : forex
+                    ? "SL"
+                    : "نوع"
                 }
                 value={
-                  isQT
+                  pocket
                     ? `${payoutNumber}%`
-                    : slNumber >
-                      0
-                    ? `${slNumber} ${
-                        isSharesAccount
-                          ? "%"
-                          : "pips"
-                      }`
-                    : "—"
+                    : forex
+                    ? `${slNumber} pips`
+                    : "Shares"
                 }
               />
             </div>
           </section>
-          {/* Start */}
+          {/* =================================================
+              Start
+          ================================================= */}
           <button
             type="button"
-            disabled={!isValid}
-            onClick={onStart}
+            disabled={
+              !isValid
+            }
+            onClick={
+              onStart
+            }
             className={`mt-5 flex h-14 w-full items-center justify-center gap-2 rounded-2xl font-bold transition ${
               isValid
                 ? "bg-emerald-400 text-[#04120c] active:scale-[0.98]"
@@ -696,14 +876,99 @@ export default function NewSession({
               size={18}
             />
           </button>
+          {/* =================================================
+              Disclaimer
+          ================================================= */}
           <p className="mt-5 text-center text-[10px] leading-5 text-white/20">
-            هذه الأداة لإدارة المخاطر
-            والحسابات فقط، ولا تضمن
-            تحقيق أرباح أو نتائج محددة.
+            أداة إدارة مخاطر وحسابات تقديرية.
+            في Forex تختلف قيمة Pip حسب الزوج
+            وحجم العقد وعملة الحساب والوسيط.
+            وفي Pocket Option يعتمد الربح على
+            Payout المعروض وقت الصفقة.
           </p>
         </main>
       </div>
     </div>
+  );
+}
+/* =========================================================
+   Account Label
+========================================================= */
+function getAccountLabel(
+  accountType: AccountType
+) {
+  const all = [
+    ...POCKET_OPTIONS,
+    ...FOREX_OPTIONS,
+    ...SHARES_OPTIONS,
+  ];
+  return (
+    all.find(
+      (item) =>
+        item.value ===
+        accountType
+    )?.label ??
+    "غير محدد"
+  );
+}
+/* =========================================================
+   Account Group
+========================================================= */
+function AccountGroup({
+  title,
+  icon,
+  children,
+  className = "",
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div
+      className={
+        className
+      }
+    >
+      <div className="mb-3 flex items-center gap-2">
+        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.04] text-white/60">
+          {icon}
+        </div>
+        <span className="text-xs font-bold text-white/70">
+          {title}
+        </span>
+      </div>
+      {children}
+    </div>
+  );
+}
+/* =========================================================
+   Account Button
+========================================================= */
+function AccountButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={
+        onClick
+      }
+      className={`min-h-12 rounded-xl border px-2 text-[10px] font-bold leading-4 transition active:scale-[0.97] ${
+        active
+          ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-400"
+          : "border-white/[0.07] bg-[#0b0f14] text-white/45"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 /* =========================================================
@@ -748,14 +1013,17 @@ function MoneyInput({
         <input
           type="text"
           inputMode="decimal"
-          value={value}
-          onChange={(event) =>
+          value={
+            value
+          }
+          onChange={(
+            event
+          ) =>
             onChange(
-              event.target.value
-                .replace(
-                  ",",
-                  "."
-                )
+              event.target.value.replace(
+                ",",
+                "."
+              )
             )
           }
           placeholder={
@@ -794,14 +1062,17 @@ function NumberInput({
         <input
           type="text"
           inputMode="decimal"
-          value={value}
-          onChange={(event) =>
+          value={
+            value
+          }
+          onChange={(
+            event
+          ) =>
             onChange(
-              event.target.value
-                .replace(
-                  ",",
-                  "."
-                )
+              event.target.value.replace(
+                ",",
+                "."
+              )
             )
           }
           placeholder={
