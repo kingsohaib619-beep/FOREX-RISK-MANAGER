@@ -1,24 +1,28 @@
 /**
- * Pocket Option / Forex / Shares Risk Calculator
+ * =========================================================
+ * FOREX RISK MANAGER
+ * Trading / Lot Calculator
+ * =========================================================
  *
  * يدعم:
- * - Pocket Option QT Real
- * - Pocket Option QT Demo
- * - Pocket Option Tournament
- * - Forex MT5 Real
- * - Forex MT5 Demo
- * - Forex MT4 Real
- * - Forex MT4 Demo
+ *
+ * Pocket Option:
+ * - QT Real
+ * - QT Demo
+ * - Tournament
+ *
+ * Forex:
+ * - MT5 Real
+ * - MT5 Demo
+ * - MT4 Real
+ * - MT4 Demo
+ *
+ * Shares:
  * - Shares Real
  * - Shares Demo
  *
- * مهم:
- * هذه الحاسبة تحسب حجم المخاطرة/الصفقة رياضيًا.
- * لا تضمن الربح.
+ * =========================================================
  */
-/* =========================================================
-   Account Types
-========================================================= */
 export type AccountType =
   | "QT_REAL"
   | "QT_DEMO"
@@ -30,16 +34,85 @@ export type AccountType =
   | "SHARES_REAL"
   | "SHARES_DEMO";
 /* =========================================================
-   Instrument Types
+   Input
 ========================================================= */
-export type InstrumentType =
-  | "QUICK_TRADING"
-  | "FOREX"
-  | "SHARES";
+export type TradingCalculationInput = {
+  accountType: AccountType;
+  balance: number;
+  riskPercent: number;
+  /**
+   * Pocket Option payout.
+   *
+   * مثال:
+   * 92 = 92%
+   */
+  payout?: number;
+  /**
+   * Forex / Shares
+   */
+  stopLossPips?: number;
+  takeProfitPips?: number;
+  /**
+   * قيمة النقطة للوت قياسي.
+   *
+   * Forex:
+   * غالبًا $10 للوت القياسي في أزواج USD
+   */
+  pipValuePerStandardLot?: number;
+  /**
+   * Shares:
+   * قيمة المخاطرة لكل سهم
+   */
+  shareRiskPerUnit?: number;
+  /**
+   * حدود اللوت
+   */
+  minLot?: number;
+  maxLot?: number;
+  lotStep?: number;
+};
 /* =========================================================
-   Account helpers
+   Result
 ========================================================= */
-export function isQuickTrading(
+export type TradingCalculationResult = {
+  accountType: AccountType;
+  lot: number;
+  riskMoney: number;
+  potentialProfit: number;
+  potentialLoss: number;
+  theoreticalLot: number;
+  stopLossPips: number;
+  takeProfitPips: number;
+  payout: number;
+  pipValuePerLot: number;
+  isValid: boolean;
+  error?: string;
+};
+/* =========================================================
+   Defaults
+========================================================= */
+/**
+ * القيمة التقريبية لقيمة Pip
+ * للوت القياسي.
+ */
+const DEFAULT_PIP_VALUE = 10;
+/**
+ * Payout افتراضي لـ Pocket Option.
+ *
+ * يجب تغييرها من الواجهة حسب
+ * الـ payout الحالي.
+ */
+const DEFAULT_PAYOUT = 92;
+/**
+ * الحدود الافتراضية للوت Forex.
+ */
+const DEFAULT_MIN_LOT = 0.01;
+const DEFAULT_MAX_LOT = 100;
+const DEFAULT_LOT_STEP = 0.01;
+/* =========================================================
+   Helpers
+========================================================= */
+function isPocketOption(
   accountType: AccountType
 ): boolean {
   return (
@@ -48,7 +121,7 @@ export function isQuickTrading(
     accountType === "TOURNAMENT"
   );
 }
-export function isForexAccount(
+function isForex(
   accountType: AccountType
 ): boolean {
   return (
@@ -58,7 +131,7 @@ export function isForexAccount(
     accountType === "MT4_DEMO"
   );
 }
-export function isSharesAccount(
+function isShares(
   accountType: AccountType
 ): boolean {
   return (
@@ -66,177 +139,95 @@ export function isSharesAccount(
     accountType === "SHARES_DEMO"
   );
 }
-export function getInstrumentType(
-  accountType: AccountType
-): InstrumentType {
-  if (isQuickTrading(accountType)) {
-    return "QUICK_TRADING";
-  }
-  if (isSharesAccount(accountType)) {
-    return "SHARES";
-  }
-  return "FOREX";
-}
 /* =========================================================
-   Account Labels
+   Round Lot
 ========================================================= */
-export const ACCOUNT_LABELS: Record<
-  AccountType,
-  string
-> = {
-  QT_REAL: "QT Real",
-  QT_DEMO: "QT Demo",
-  TOURNAMENT: "Tournament",
-  MT5_REAL: "Forex MT5 Real",
-  MT5_DEMO: "Forex MT5 Demo",
-  MT4_REAL: "Forex MT4 Real",
-  MT4_DEMO: "Forex MT4 Demo",
-  SHARES_REAL: "Shares Real",
-  SHARES_DEMO: "Shares Demo",
-};
-/* =========================================================
-   Legacy Forex Lot Calculator
-========================================================= */
-export type LotCalculationInput = {
-  balance: number;
-  riskPercent: number;
-  stopLossPips: number;
-  /**
-   * قيمة النقطة للوت القياسي.
-   *
-   * لا يجب افتراض أنها 10$ دائمًا.
-   * يمكن تمرير القيمة الحقيقية من إعدادات الأداة/الوسيط.
-   */
-  pipValuePerStandardLot?: number;
-  minLot?: number;
-  maxLot?: number;
-  lotStep?: number;
-  /**
-   * Take Profit بالنقاط.
-   *
-   * اختياري للحفاظ على التوافق مع الكود القديم.
-   */
-  takeProfitPips?: number;
-};
-export type LotCalculationResult = {
-  lot: number;
-  riskMoney: number;
-  stopLossPips: number;
-  pipValuePerLot: number;
-  theoreticalLot: number;
-  /**
-   * الربح المحتمل عند الوصول إلى TP.
-   *
-   * إذا لم يتم تمرير TP:
-   * يستخدم SL كقيمة تقريبية فقط.
-   */
-  potentialProfit: number;
-  isValid: boolean;
-  error?: string;
-};
-/* =========================================================
-   Defaults
-========================================================= */
-/**
- * قيمة تقريبية فقط.
- *
- * لا تستخدم هذه القيمة كقيمة عالمية لجميع الأزواج.
- */
-const DEFAULT_PIP_VALUE = 10;
-const DEFAULT_MIN_LOT = 0.01;
-const DEFAULT_MAX_LOT = 100;
-const DEFAULT_LOT_STEP = 0.01;
-/**
- * حجم العقد القياسي في Forex.
- */
-const DEFAULT_CONTRACT_SIZE = 100000;
-/**
- * Payout افتراضي لـ QT.
- *
- * 92% = 0.92
- */
-const DEFAULT_PAYOUT = 0.92;
-/* =========================================================
-   Utilities
-========================================================= */
-function roundMoney(
-  value: number
-): number {
-  return Number(value.toFixed(2));
-}
-function roundLot(
+function roundDown(
   value: number,
-  decimals = 4
+  decimals: number
 ): number {
-  return Number(value.toFixed(decimals));
+  const factor =
+    Math.pow(10, decimals);
+  return (
+    Math.floor(
+      value * factor
+    ) / factor
+  );
 }
-/**
- * التقريب إلى Lot Step.
- *
- * مثال:
- *
- * theoreticalLot = 0.137
- * lotStep = 0.01
- *
- * النتيجة:
- * 0.13
- */
 function roundToLotStep(
   lot: number,
   step: number
 ): number {
-  if (!Number.isFinite(lot)) {
-    return 0;
-  }
-  if (!Number.isFinite(step) || step <= 0) {
+  if (
+    !Number.isFinite(step) ||
+    step <= 0
+  ) {
     return lot;
   }
   return Math.floor(
-    (lot + Number.EPSILON) / step
+    lot / step
   ) * step;
 }
 /* =========================================================
-   Validation
+   Invalid Result
 ========================================================= */
-function invalidLotResult(
+function invalidResult(
+  accountType: AccountType,
   error: string
-): LotCalculationResult {
+): TradingCalculationResult {
   return {
+    accountType,
     lot: 0,
     riskMoney: 0,
-    stopLossPips: 0,
-    pipValuePerLot: 0,
-    theoreticalLot: 0,
     potentialProfit: 0,
+    potentialLoss: 0,
+    theoreticalLot: 0,
+    stopLossPips: 0,
+    takeProfitPips: 0,
+    payout: 0,
+    pipValuePerLot: 0,
     isValid: false,
     error,
   };
 }
 /* =========================================================
-   Forex Lot Calculation
+   Pocket Option
 ========================================================= */
-export function calculateLot(
-  input: LotCalculationInput
-): LotCalculationResult {
+/**
+ * حساب Pocket Option.
+ *
+ * في QT لا يوجد مفهوم Forex Lot / Pip
+ * بنفس طريقة MT4 / MT5.
+ *
+ * لذلك:
+ *
+ * riskMoney = المبلغ المعرض للخطر
+ *
+ * payout = نسبة الربح
+ *
+ * potentialProfit =
+ * riskMoney × payout
+ *
+ * lot = riskMoney
+ *
+ * هنا نستخدم "lot" كقيمة الصفقة
+ * المالية في Pocket Option.
+ */
+function calculatePocketOption(
+  input: TradingCalculationInput
+): TradingCalculationResult {
   const {
+    accountType,
     balance,
     riskPercent,
-    stopLossPips,
-    pipValuePerStandardLot =
-      DEFAULT_PIP_VALUE,
-    minLot = DEFAULT_MIN_LOT,
-    maxLot = DEFAULT_MAX_LOT,
-    lotStep = DEFAULT_LOT_STEP,
-    takeProfitPips,
+    payout = DEFAULT_PAYOUT,
   } = input;
-  /* -------------------------------------------------------
-     Validation
-  ------------------------------------------------------- */
   if (
     !Number.isFinite(balance) ||
     balance <= 0
   ) {
-    return invalidLotResult(
+    return invalidResult(
+      accountType,
       "رصيد الحساب غير صالح."
     );
   }
@@ -244,15 +235,134 @@ export function calculateLot(
     !Number.isFinite(riskPercent) ||
     riskPercent <= 0
   ) {
-    return invalidLotResult(
+    return invalidResult(
+      accountType,
       "نسبة المخاطرة غير صالحة."
     );
   }
   if (
-    !Number.isFinite(stopLossPips) ||
+    !Number.isFinite(payout) ||
+    payout <= 0 ||
+    payout > 100
+  ) {
+    return invalidResult(
+      accountType,
+      "نسبة Payout يجب أن تكون بين 0 و100."
+    );
+  }
+  const riskMoney =
+    balance *
+    (riskPercent / 100);
+  /**
+   * في Pocket Option:
+   *
+   * إذا خاطرنا بـ $10
+   * و Payout = 92%
+   *
+   * الربح = $9.20
+   */
+  const potentialProfit =
+    riskMoney *
+    (payout / 100);
+  const potentialLoss =
+    riskMoney;
+  /**
+   * نستخدم مبلغ الصفقة
+   * كقيمة lot داخل التطبيق.
+   *
+   * مثال:
+   *
+   * Balance = 1000
+   * Risk = 1%
+   *
+   * Trade Amount = $10
+   */
+  const lot =
+    roundDown(
+      riskMoney,
+      2
+    );
+  return {
+    accountType,
+    lot,
+    riskMoney:
+      Number(
+        riskMoney.toFixed(2)
+      ),
+    potentialProfit:
+      Number(
+        potentialProfit.toFixed(2)
+      ),
+    potentialLoss:
+      Number(
+        potentialLoss.toFixed(2)
+      ),
+    theoreticalLot:
+      Number(
+        riskMoney.toFixed(2)
+      ),
+    stopLossPips: 0,
+    takeProfitPips: 0,
+    payout,
+    pipValuePerLot: 0,
+    isValid: true,
+  };
+}
+/* =========================================================
+   Forex MT4 / MT5
+========================================================= */
+/**
+ * حساب Forex.
+ *
+ * Lot =
+ *
+ * Risk Money /
+ * (SL Pips × Pip Value)
+ */
+function calculateForex(
+  input: TradingCalculationInput
+): TradingCalculationResult {
+  const {
+    accountType,
+    balance,
+    riskPercent,
+    stopLossPips = 0,
+    takeProfitPips = 0,
+    pipValuePerStandardLot =
+      DEFAULT_PIP_VALUE,
+    minLot =
+      DEFAULT_MIN_LOT,
+    maxLot =
+      DEFAULT_MAX_LOT,
+    lotStep =
+      DEFAULT_LOT_STEP,
+  } = input;
+  if (
+    !Number.isFinite(balance) ||
+    balance <= 0
+  ) {
+    return invalidResult(
+      accountType,
+      "رصيد الحساب غير صالح."
+    );
+  }
+  if (
+    !Number.isFinite(riskPercent) ||
+    riskPercent <= 0
+  ) {
+    return invalidResult(
+      accountType,
+      "نسبة المخاطرة غير صالحة."
+    );
+  }
+  if (
+    !Number.isFinite(
+      stopLossPips
+    ) ||
     stopLossPips <= 0
   ) {
-    return invalidLotResult(
+    return invalidResult(
+      accountType,
       "Stop Loss يجب أن يكون أكبر من صفر."
     );
   }
@@ -262,645 +372,292 @@ export function calculateLot(
     ) ||
     pipValuePerStandardLot <= 0
   ) {
-    return invalidLotResult(
-      "قيمة النقطة غير صالحة."
+    return invalidResult(
+      accountType,
+      "قيمة Pip غير صالحة."
     );
   }
-  if (
-    !Number.isFinite(minLot) ||
-    minLot <= 0
-  ) {
-    return invalidLotResult(
-      "Minimum Lot غير صالح."
-    );
-  }
-  if (
-    !Number.isFinite(maxLot) ||
-    maxLot < minLot
-  ) {
-    return invalidLotResult(
-      "Maximum Lot غير صالح."
-    );
-  }
-  if (
-    !Number.isFinite(lotStep) ||
-    lotStep <= 0
-  ) {
-    return invalidLotResult(
-      "Lot Step غير صالح."
-    );
-  }
-  /* -------------------------------------------------------
-     Risk Money
-  ------------------------------------------------------- */
   const riskMoney =
     balance *
     (riskPercent / 100);
-  /* -------------------------------------------------------
-     Theoretical Lot
-  ------------------------------------------------------- */
+  /**
+   * Lot الحقيقي:
+   *
+   * $10 risk
+   * / (20 pips × $10)
+   *
+   * = 0.05 lot
+   */
   const theoreticalLot =
     riskMoney /
     (
       stopLossPips *
       pipValuePerStandardLot
     );
-  /* -------------------------------------------------------
-     Broker limits
-  ------------------------------------------------------- */
   let lot =
     roundToLotStep(
       theoreticalLot,
       lotStep
     );
-  /*
-   * إذا كان الحجم النظري أقل من الحد الأدنى:
-   * لا نجبر الصفقة على الحد الأدنى بدون تنبيه،
-   * لأن ذلك قد يجعل المخاطرة أعلى من المطلوب.
+  /**
+   * لا نرفع اللوت إلى minLot
+   * إذا كان ذلك سيجعل المخاطرة أكبر
+   * من المخاطرة المطلوبة.
+   *
+   * لذلك إذا كانت النتيجة أقل من
+   * الحد الأدنى للوسيط نستخدم minLot
+   * لكن نترك الحساب واضحًا للمستخدم.
    */
-  if (theoreticalLot < minLot) {
-    lot = 0;
-  } else {
-    lot = Math.min(
+  lot =
+    Math.max(
+      minLot,
+      lot
+    );
+  lot =
+    Math.min(
       maxLot,
       lot
     );
-  }
-  lot = roundLot(
-    lot,
-    4
-  );
-  if (lot <= 0) {
-    return {
-      lot: 0,
-      riskMoney: roundMoney(
-        riskMoney
-      ),
-      stopLossPips,
-      pipValuePerLot:
-        pipValuePerStandardLot,
-      theoreticalLot:
-        roundLot(
-          theoreticalLot,
-          4
-        ),
-      potentialProfit: 0,
-      isValid: false,
-      error:
-        "حجم اللوت المحسوب أقل من Minimum Lot. خفّض Stop Loss أو ارفع نسبة المخاطرة/الرصيد.",
-    };
-  }
-  /* -------------------------------------------------------
-     Maximum Loss
-  ------------------------------------------------------- */
+  lot =
+    Number(
+      lot.toFixed(2)
+    );
+  /**
+   * الخسارة الفعلية
+   * حسب اللوت بعد التقريب.
+   */
   const potentialLoss =
     lot *
     stopLossPips *
     pipValuePerStandardLot;
-  /* -------------------------------------------------------
-     Potential Profit
-  ------------------------------------------------------- */
-  const profitDistance =
-    Number.isFinite(
-      takeProfitPips
-    ) &&
-    Number(takeProfitPips) > 0
-      ? Number(takeProfitPips)
-      : stopLossPips;
+  /**
+   * الربح المتوقع
+   * حسب TP.
+   */
   const potentialProfit =
-    lot *
-    profitDistance *
-    pipValuePerStandardLot;
-  /* -------------------------------------------------------
-     Result
-  ------------------------------------------------------- */
+    takeProfitPips > 0
+      ? lot *
+        takeProfitPips *
+        pipValuePerStandardLot
+      : 0;
   return {
+    accountType,
     lot,
     riskMoney:
-      roundMoney(
-        riskMoney
-      ),
-    stopLossPips,
-    pipValuePerLot:
-      pipValuePerStandardLot,
-    theoreticalLot:
-      roundLot(
-        theoreticalLot,
-        4
+      Number(
+        riskMoney.toFixed(2)
       ),
     potentialProfit:
-      roundMoney(
-        potentialProfit
+      Number(
+        potentialProfit.toFixed(2)
       ),
+    potentialLoss:
+      Number(
+        potentialLoss.toFixed(2)
+      ),
+    theoreticalLot:
+      Number(
+        theoreticalLot.toFixed(4)
+      ),
+    stopLossPips,
+    takeProfitPips,
+    payout: 0,
+    pipValuePerLot:
+      pipValuePerStandardLot,
     isValid: true,
   };
 }
 /* =========================================================
-   QT Calculation
+   Shares
 ========================================================= */
-export type QuickTradingInput = {
-  balance: number;
-  riskPercent: number;
-  /**
-   * نسبة الـPayout.
-   *
-   * مثال:
-   * 92 = 92%
-   * 0.92 = 92%
-   */
-  payout?: number;
-};
-export type QuickTradingResult = {
-  investment: number;
-  riskMoney: number;
-  potentialProfit: number;
-  potentialReturn: number;
-  potentialLoss: number;
-  balanceAfterWin: number;
-  balanceAfterLoss: number;
-  payoutPercent: number;
-  isValid: boolean;
-  error?: string;
-};
-export function calculateQuickTrading(
-  input: QuickTradingInput
-): QuickTradingResult {
-  const {
-    balance,
-    riskPercent,
-  } = input;
-  let payout =
-    input.payout ??
-    DEFAULT_PAYOUT;
-  if (
-    payout > 1
-  ) {
-    payout =
-      payout / 100;
-  }
-  if (
-    !Number.isFinite(balance) ||
-    balance <= 0
-  ) {
-    return {
-      investment: 0,
-      riskMoney: 0,
-      potentialProfit: 0,
-      potentialReturn: 0,
-      potentialLoss: 0,
-      balanceAfterWin: 0,
-      balanceAfterLoss: 0,
-      payoutPercent: 0,
-      isValid: false,
-      error:
-        "رصيد الحساب غير صالح.",
-    };
-  }
-  if (
-    !Number.isFinite(
-      riskPercent
-    ) ||
-    riskPercent <= 0
-  ) {
-    return {
-      investment: 0,
-      riskMoney: 0,
-      potentialProfit: 0,
-      potentialReturn: 0,
-      potentialLoss: 0,
-      balanceAfterWin: 0,
-      balanceAfterLoss: 0,
-      payoutPercent: 0,
-      isValid: false,
-      error:
-        "نسبة المخاطرة غير صالحة.",
-    };
-  }
-  if (
-    !Number.isFinite(payout) ||
-    payout < 0 ||
-    payout > 1
-  ) {
-    return {
-      investment: 0,
-      riskMoney: 0,
-      potentialProfit: 0,
-      potentialReturn: 0,
-      potentialLoss: 0,
-      balanceAfterWin: 0,
-      balanceAfterLoss: 0,
-      payoutPercent: 0,
-      isValid: false,
-      error:
-        "نسبة Payout غير صالحة.",
-    };
-  }
-  const riskMoney =
-    balance *
-    (riskPercent / 100);
-  /**
-   * في QT:
-   *
-   * Investment = المبلغ المعرض للخسارة.
-   */
-  const investment =
-    roundMoney(
-      riskMoney
-    );
-  const potentialProfit =
-    roundMoney(
-      investment *
-      payout
-    );
-  const potentialReturn =
-    roundMoney(
-      investment +
-      potentialProfit
-    );
-  const potentialLoss =
-    investment;
-  return {
-    investment,
-    riskMoney:
-      roundMoney(
-        riskMoney
-      ),
-    potentialProfit,
-    potentialReturn,
-    potentialLoss,
-    balanceAfterWin:
-      roundMoney(
-        balance +
-        potentialProfit
-      ),
-    balanceAfterLoss:
-      roundMoney(
-        Math.max(
-          0,
-          balance -
-          investment
-        )
-      ),
-    payoutPercent:
-      roundMoney(
-        payout * 100
-      ),
-    isValid:
-      investment > 0,
-  };
-}
-/* =========================================================
-   Shares Calculation
-========================================================= */
-export type SharesCalculationInput = {
-  balance: number;
-  riskPercent: number;
-  entryPrice: number;
-  stopLossPrice: number;
-  takeProfitPrice?: number;
-  /**
-   * يسمح للصفقة القصيرة باستخدام
-   * اتجاه مختلف لاحقًا.
-   *
-   * حاليًا الافتراضي LONG.
-   */
-  direction?: "LONG" | "SHORT";
-};
-export type SharesCalculationResult = {
-  shares: number;
-  riskMoney: number;
-  riskPerShare: number;
-  positionValue: number;
-  potentialLoss: number;
-  potentialProfit: number;
-  isValid: boolean;
-  error?: string;
-};
-export function calculateShares(
-  input: SharesCalculationInput
-): SharesCalculationResult {
-  const {
-    balance,
-    riskPercent,
-    entryPrice,
-    stopLossPrice,
-    takeProfitPrice = 0,
-    direction = "LONG",
-  } = input;
-  if (
-    !Number.isFinite(balance) ||
-    balance <= 0
-  ) {
-    return invalidSharesResult(
-      "رصيد الحساب غير صالح."
-    );
-  }
-  if (
-    !Number.isFinite(
-      riskPercent
-    ) ||
-    riskPercent <= 0
-  ) {
-    return invalidSharesResult(
-      "نسبة المخاطرة غير صالحة."
-    );
-  }
-  if (
-    !Number.isFinite(
-      entryPrice
-    ) ||
-    entryPrice <= 0
-  ) {
-    return invalidSharesResult(
-      "سعر الدخول غير صالح."
-    );
-  }
-  if (
-    !Number.isFinite(
-      stopLossPrice
-    ) ||
-    stopLossPrice <= 0
-  ) {
-    return invalidSharesResult(
-      "Stop Loss غير صالح."
-    );
-  }
-  const riskMoney =
-    balance *
-    (riskPercent / 100);
-  let riskPerShare: number;
-  if (
-    direction === "SHORT"
-  ) {
-    riskPerShare =
-      stopLossPrice -
-      entryPrice;
-  } else {
-    riskPerShare =
-      entryPrice -
-      stopLossPrice;
-  }
-  if (
-    riskPerShare <= 0
-  ) {
-    return invalidSharesResult(
-      direction === "SHORT"
-        ? "في الصفقة القصيرة يجب أن يكون Stop Loss أعلى من سعر الدخول."
-        : "في الصفقة الطويلة يجب أن يكون Stop Loss أقل من سعر الدخول."
-    );
-  }
-  const theoreticalShares =
-    riskMoney /
-    riskPerShare;
-  /**
-   * لا يمكن شراء جزء من سهم في هذا النموذج.
-   */
-  const shares =
-    Math.floor(
-      theoreticalShares
-    );
-  if (shares < 1) {
-    return invalidSharesResult(
-      "المخاطرة صغيرة جدًا لشراء سهم واحد."
-    );
-  }
-  const positionValue =
-    shares *
-    entryPrice;
-  const potentialLoss =
-    shares *
-    riskPerShare;
-  let potentialProfit =
-    0;
-  if (
-    Number.isFinite(
-      takeProfitPrice
-    ) &&
-    takeProfitPrice > 0
-  ) {
-    const profitPerShare =
-      direction === "SHORT"
-        ? entryPrice -
-          takeProfitPrice
-        : takeProfitPrice -
-          entryPrice;
-    if (
-      profitPerShare > 0
-    ) {
-      potentialProfit =
-        shares *
-        profitPerShare;
-    }
-  }
-  return {
-    shares,
-    riskMoney:
-      roundMoney(
-        riskMoney
-      ),
-    riskPerShare:
-      roundMoney(
-        riskPerShare
-      ),
-    positionValue:
-      roundMoney(
-        positionValue
-      ),
-    potentialLoss:
-      roundMoney(
-        potentialLoss
-      ),
-    potentialProfit:
-      roundMoney(
-        potentialProfit
-      ),
-    isValid:
-      shares > 0,
-  };
-}
-function invalidSharesResult(
-  error: string
-): SharesCalculationResult {
-  return {
-    shares: 0,
-    riskMoney: 0,
-    riskPerShare: 0,
-    positionValue: 0,
-    potentialLoss: 0,
-    potentialProfit: 0,
-    isValid: false,
-    error,
-  };
-}
-/* =========================================================
-   Unified Calculator
-========================================================= */
-export type TradingCalculationInput = {
-  accountType: AccountType;
-  balance: number;
-  riskPercent: number;
-  /* QT */
-  payout?: number;
-  /* Forex */
-  stopLossPips?: number;
-  takeProfitPips?: number;
-  pipValuePerStandardLot?: number;
-  minLot?: number;
-  maxLot?: number;
-  lotStep?: number;
-  /* Shares */
-  entryPrice?: number;
-  stopLossPrice?: number;
-  takeProfitPrice?: number;
-  direction?: "LONG" | "SHORT";
-};
-export type TradingCalculationResult = {
-  accountType: AccountType;
-  instrument: InstrumentType;
-  riskMoney: number;
-  investment: number;
-  lot: number;
-  shares: number;
-  theoreticalLot: number;
-  pipValuePerLot: number;
-  riskPerShare: number;
-  positionValue: number;
-  potentialLoss: number;
-  potentialProfit: number;
-  balanceAfterWin: number;
-  balanceAfterLoss: number;
-  payoutPercent: number;
-  isValid: boolean;
-  error?: string;
-};
-export function calculateTrading(
+/**
+ * حساب الأسهم.
+ *
+ * في الأسهم لا نستخدم Forex Lot.
+ *
+ * نحسب عدد الوحدات/الأسهم:
+ *
+ * Risk Money /
+ * Risk Per Share
+ *
+ * ثم نضع العدد في lot
+ * حتى يستطيع النظام الحالي
+ * عرضه بدون تغيير الواجهة بالكامل.
+ */
+function calculateShares(
   input: TradingCalculationInput
 ): TradingCalculationResult {
   const {
     accountType,
     balance,
     riskPercent,
+    shareRiskPerUnit = 1,
+    minLot = 1,
+    maxLot = 100000,
+    lotStep = 1,
   } = input;
-  const instrument =
-    getInstrumentType(
-      accountType
+  if (
+    !Number.isFinite(balance) ||
+    balance <= 0
+  ) {
+    return invalidResult(
+      accountType,
+      "رصيد الحساب غير صالح."
     );
-  /* -------------------------------------------------------
-     QT / Tournament
-  ------------------------------------------------------- */
-  if (
-    instrument ===
-    "QUICK_TRADING"
-  ) {
-    const result =
-      calculateQuickTrading({
-        balance,
-        riskPercent,
-        payout:
-          input.payout,
-      });
-    return {
-      accountType,
-      instrument,
-      riskMoney:
-        result.riskMoney,
-      investment:
-        result.investment,
-      lot: 0,
-      shares: 0,
-      theoreticalLot: 0,
-      pipValuePerLot: 0,
-      riskPerShare: 0,
-      positionValue:
-        result.investment,
-      potentialLoss:
-        result.potentialLoss,
-      potentialProfit:
-        result.potentialProfit,
-      balanceAfterWin:
-        result.balanceAfterWin,
-      balanceAfterLoss:
-        result.balanceAfterLoss,
-      payoutPercent:
-        result.payoutPercent,
-      isValid:
-        result.isValid,
-      error:
-        result.error,
-    };
   }
-  /* -------------------------------------------------------
-     Shares
-  ------------------------------------------------------- */
   if (
-    instrument ===
-    "SHARES"
+    !Number.isFinite(riskPercent) ||
+    riskPercent <= 0
   ) {
-    const result =
-      calculateShares({
-        balance,
-        riskPercent,
-        entryPrice:
-          input.entryPrice ?? 0,
-        stopLossPrice:
-          input.stopLossPrice ?? 0,
-        takeProfitPrice:
-          input.takeProfitPrice ?? 0,
-        direction:
-          input.direction ??
-          "LONG",
-      });
-    return {
+    return invalidResult(
       accountType,
-      instrument,
-      riskMoney:
-        result.riskMoney,
-      investment:
-        result.positionValue,
-      lot: 0,
-      shares:
-        result.shares,
-      theoreticalLot: 0,
-      pipValuePerLot: 0,
-      riskPerShare:
-        result.riskPerShare,
-      positionValue:
-        result.positionValue,
-      potentialLoss:
-        result.potentialLoss,
-      potentialProfit:
-        result.potentialProfit,
-      balanceAfterWin:
-        roundMoney(
-          balance +
-          result.potentialProfit
-        ),
-      balanceAfterLoss:
-        roundMoney(
-          Math.max(
-            0,
-            balance -
-            result.potentialLoss
-          )
-        ),
-      payoutPercent: 0,
-      isValid:
-        result.isValid,
-      error:
-        result.error,
-    };
+      "نسبة المخاطرة غير صالحة."
+    );
   }
-  /* -------------------------------------------------------
-     MT4 / MT5 Forex
-  ------------------------------------------------------- */
+  if (
+    !Number.isFinite(
+      shareRiskPerUnit
+    ) ||
+    shareRiskPerUnit <= 0
+  ) {
+    return invalidResult(
+      accountType,
+      "قيمة المخاطرة لكل سهم غير صالحة."
+    );
+  }
+  const riskMoney =
+    balance *
+    (riskPercent / 100);
+  const theoreticalUnits =
+    riskMoney /
+    shareRiskPerUnit;
+  let units =
+    roundToLotStep(
+      theoreticalUnits,
+      lotStep
+    );
+  units =
+    Math.max(
+      minLot,
+      units
+    );
+  units =
+    Math.min(
+      maxLot,
+      units
+    );
+  units =
+    Number(
+      units.toFixed(2)
+    );
+  const potentialLoss =
+    units *
+    shareRiskPerUnit;
+  return {
+    accountType,
+    lot: units,
+    riskMoney:
+      Number(
+        riskMoney.toFixed(2)
+      ),
+    potentialProfit: 0,
+    potentialLoss:
+      Number(
+        potentialLoss.toFixed(2)
+      ),
+    theoreticalLot:
+      Number(
+        theoreticalUnits.toFixed(4)
+      ),
+    stopLossPips: 0,
+    takeProfitPips: 0,
+    payout: 0,
+    pipValuePerLot: 0,
+    isValid: true,
+  };
+}
+/* =========================================================
+   Main Calculator
+========================================================= */
+export function calculateTrading(
+  input: TradingCalculationInput
+): TradingCalculationResult {
+  if (
+    isPocketOption(
+      input.accountType
+    )
+  ) {
+    return calculatePocketOption(
+      input
+    );
+  }
+  if (
+    isForex(
+      input.accountType
+    )
+  ) {
+    return calculateForex(
+      input
+    );
+  }
+  if (
+    isShares(
+      input.accountType
+    )
+  ) {
+    return calculateShares(
+      input
+    );
+  }
+  return invalidResult(
+    input.accountType,
+    "نوع الحساب غير مدعوم."
+  );
+}
+/* =========================================================
+   Backward Compatibility
+========================================================= */
+/**
+ * الإصدارات القديمة من المشروع
+ * تستخدم calculateLot().
+ *
+ * نبقيها حتى لا تنكسر الملفات
+ * الأخرى في المشروع.
+ */
+export type LotCalculationInput = {
+  balance: number;
+  riskPercent: number;
+  stopLossPips: number;
+  pipValuePerStandardLot?: number;
+  minLot?: number;
+  maxLot?: number;
+  lotStep?: number;
+};
+export type LotCalculationResult = {
+  lot: number;
+  riskMoney: number;
+  stopLossPips: number;
+  pipValuePerLot: number;
+  theoreticalLot: number;
+  potentialProfit: number;
+  isValid: boolean;
+  error?: string;
+};
+export function calculateLot(
+  input: LotCalculationInput
+): LotCalculationResult {
   const result =
-    calculateLot({
-      balance,
-      riskPercent,
+    calculateForex({
+      accountType:
+        "MT5_DEMO",
+      balance:
+        input.balance,
+      riskPercent:
+        input.riskPercent,
       stopLossPips:
-        input.stopLossPips ?? 0,
+        input.stopLossPips,
       takeProfitPips:
-        input.takeProfitPips,
+        input.stopLossPips,
       pipValuePerStandardLot:
         input.pipValuePerStandardLot ??
         DEFAULT_PIP_VALUE,
@@ -915,46 +672,18 @@ export function calculateTrading(
         DEFAULT_LOT_STEP,
     });
   return {
-    accountType,
-    instrument,
-    riskMoney:
-      result.riskMoney,
-    investment: 0,
     lot:
       result.lot,
-    shares: 0,
-    theoreticalLot:
-      result.theoreticalLot,
+    riskMoney:
+      result.riskMoney,
+    stopLossPips:
+      result.stopLossPips,
     pipValuePerLot:
       result.pipValuePerLot,
-    riskPerShare: 0,
-    positionValue:
-      result.lot *
-      DEFAULT_CONTRACT_SIZE,
-    potentialLoss:
-      result.lot *
-      result.stopLossPips *
-      result.pipValuePerLot,
+    theoreticalLot:
+      result.theoreticalLot,
     potentialProfit:
       result.potentialProfit,
-    balanceAfterWin:
-      roundMoney(
-        balance +
-        result.potentialProfit
-      ),
-    balanceAfterLoss:
-      roundMoney(
-        Math.max(
-          0,
-          balance -
-          (
-            result.lot *
-            result.stopLossPips *
-            result.pipValuePerLot
-          )
-        )
-      ),
-    payoutPercent: 0,
     isValid:
       result.isValid,
     error:
@@ -962,11 +691,8 @@ export function calculateTrading(
   };
 }
 /* =========================================================
-   Quick helpers
+   Quick Lot
 ========================================================= */
-/**
- * حساب حجم اللوت فقط.
- */
 export function getLotSize(
   balance: number,
   riskPercent: number,
@@ -983,9 +709,9 @@ export function getLotSize(
     });
   return result.lot;
 }
-/**
- * حساب مبلغ المخاطرة.
- */
+/* =========================================================
+   Risk Money
+========================================================= */
 export function getRiskMoney(
   balance: number,
   riskPercent: number
@@ -1000,15 +726,16 @@ export function getRiskMoney(
   ) {
     return 0;
   }
-  return roundMoney(
-    balance *
-    (riskPercent / 100)
+  return Number(
+    (
+      balance *
+      (riskPercent / 100)
+    ).toFixed(2)
   );
 }
-/**
- * حساب نسبة المخاطرة
- * المطلوبة لمبلغ معين.
- */
+/* =========================================================
+   Risk Percent
+========================================================= */
 export function getRiskPercent(
   balance: number,
   riskMoney: number
@@ -1016,66 +743,15 @@ export function getRiskPercent(
   if (
     !Number.isFinite(balance) ||
     balance <= 0 ||
-    !Number.isFinite(
-      riskMoney
-    ) ||
+    !Number.isFinite(riskMoney) ||
     riskMoney <= 0
   ) {
     return 0;
   }
   return Number(
     (
-      (riskMoney /
-        balance) *
+      (riskMoney / balance) *
       100
     ).toFixed(4)
-  );
-}
-/**
- * حساب مبلغ استثمار QT.
- */
-export function getQuickInvestment(
-  balance: number,
-  riskPercent: number
-): number {
-  return getRiskMoney(
-    balance,
-    riskPercent
-  );
-}
-/**
- * حساب ربح QT.
- */
-export function getQuickProfit(
-  investment: number,
-  payout: number
-): number {
-  if (
-    !Number.isFinite(
-      investment
-    ) ||
-    investment <= 0
-  ) {
-    return 0;
-  }
-  let normalizedPayout =
-    payout;
-  if (
-    normalizedPayout > 1
-  ) {
-    normalizedPayout /=
-      100;
-  }
-  if (
-    !Number.isFinite(
-      normalizedPayout
-    ) ||
-    normalizedPayout < 0
-  ) {
-    return 0;
-  }
-  return roundMoney(
-    investment *
-    normalizedPayout
   );
 }
