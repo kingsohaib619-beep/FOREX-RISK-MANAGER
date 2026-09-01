@@ -1,23 +1,21 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import Dashboard from "@/components/Dashboard";
-import NewSession, {
-  type Pair,
-} from "@/components/NewSession";
-import ActiveSession, {
-  type Session,
-  type Trade,
-  type TradeResult,
-} from "@/components/ActiveSession";
+import NewSession from "@/components/NewSession";
+import ActiveSession from "@/components/ActiveSession";
 import TradeHistory from "@/components/TradeHistory";
-import {
-  calculateRisk,
-  type RiskEngineResult,
-} from "@/lib/risk-engine";
+import type {
+  Session,
+  Trade,
+  TradeResult,
+} from "@/components/ActiveSession";
+import type { Pair } from "@/components/NewSession";
 import {
   calculateLot,
-  type LotCalculationResult,
 } from "@/lib/lot-calculator";
+import {
+  calculateRisk,
+} from "@/lib/risk-engine";
 import {
   loadSession,
   saveSession,
@@ -56,7 +54,7 @@ const INITIAL_FORM: SessionForm = {
   tp: "40",
 };
 /* =========================================================
-   Main Page
+   Page
 ========================================================= */
 export default function Page() {
   const [screen, setScreen] =
@@ -71,9 +69,12 @@ export default function Page() {
      Load saved session
   ======================================================= */
   useEffect(() => {
-    const saved = loadSession();
-    if (saved) {
-      setSession(saved);
+    const stored = loadSession();
+    if (stored) {
+      setSession(stored as Session);
+      if (stored.status === "active") {
+        setScreen("active");
+      }
     }
     setReady(true);
   }, []);
@@ -91,67 +92,55 @@ export default function Page() {
   /* =======================================================
      Risk Engine
   ======================================================= */
-  const risk: RiskEngineResult | null =
-    useMemo(() => {
-      if (!session) {
-        return null;
-      }
-      return calculateRisk({
-        balance:
-          session.balance,
-        startBalance:
-          session.startBalance,
-        target:
-          session.target,
-        maxLoss:
-          session.maxLoss,
-        baseRiskPercent:
-          session.baseRisk,
-        trades:
-          session.trades.map(
-            (trade) => trade.result
-          ),
-      });
-    }, [session]);
-  /* =======================================================
-     Lot Calculator
-  ======================================================= */
-  const recommendation:
-    | LotCalculationResult
-    | null = useMemo(() => {
-    if (!session || !risk) {
+  const risk = useMemo(() => {
+    if (!session) {
       return null;
     }
-    if (!risk.shouldTrade) {
-      return {
-        lot: 0,
-        riskMoney: 0,
-        stopLossPips: session.sl,
-        pipValuePerLot: 10,
-        theoreticalLot: 0,
-        potentialProfit: 0,
-        isValid: false,
-      };
-    }
-    return calculateLot({
+    return calculateRisk({
       balance:
         session.balance,
-      riskPercent:
-        risk.currentRiskPercent,
-      stopLossPips:
-        session.sl,
-      /*
-       * قيمة تقريبية للوت القياسي.
-       *
-       * سيتم تحسينها لاحقًا لتصبح
-       * مرتبطة بالزوج وعملة الحساب.
-       */
-      pipValuePerStandardLot: 10,
-      minLot: 0.01,
-      maxLot: 100,
-      lotStep: 0.01,
+      startBalance:
+        session.startBalance,
+      target:
+        session.target,
+      maxLoss:
+        session.maxLoss,
+      baseRiskPercent:
+        session.baseRisk,
+      trades:
+        session.trades.map(
+          (trade) => trade.result
+        ),
     });
-  }, [session, risk]);
+  }, [session]);
+  /* =======================================================
+     Lot Calculation
+  ======================================================= */
+  const lotCalculation =
+    useMemo(() => {
+      if (!session || !risk) {
+        return null;
+      }
+      if (!risk.shouldTrade) {
+        return null;
+      }
+      return calculateLot({
+        balance:
+          session.balance,
+        riskPercent:
+          risk.currentRiskPercent,
+        stopLossPips:
+          session.sl,
+        pipValuePerStandardLot:
+          10,
+        minLot:
+          0.01,
+        maxLot:
+          100,
+        lotStep:
+          0.01,
+      });
+    }, [session, risk]);
   /* =======================================================
      Create Session
   ======================================================= */
@@ -208,7 +197,7 @@ export default function Page() {
       return;
     }
     /* ---------------------------------------------
-       Create session
+       New Session
     --------------------------------------------- */
     const newSession: Session = {
       balance,
@@ -224,7 +213,8 @@ export default function Page() {
       trades: [],
       createdAt:
         new Date().toISOString(),
-      status: "active",
+      status:
+        "active",
     };
     setSession(
       newSession
@@ -232,20 +222,20 @@ export default function Page() {
     setScreen("active");
   }
   /* =======================================================
-     Update Form
+     Form Update
   ======================================================= */
   function updateForm(
-    patch: Partial<SessionForm>
+    values: Partial<SessionForm>
   ) {
     setForm(
       (current) => ({
         ...current,
-        ...patch,
+        ...values,
       })
     );
   }
   /* =======================================================
-     Register WIN / LOSS
+     Register Trade Result
   ======================================================= */
   function handleTradeResult(
     result: TradeResult
@@ -253,7 +243,7 @@ export default function Page() {
     if (
       !session ||
       !risk ||
-      !recommendation
+      !lotCalculation
     ) {
       return;
     }
@@ -263,23 +253,22 @@ export default function Page() {
       return;
     }
     if (
-      !recommendation.isValid
+      !lotCalculation.isValid
     ) {
       return;
     }
     const lot =
-      recommendation.lot;
+      lotCalculation.lot;
     const riskMoney =
-      recommendation.riskMoney;
+      lotCalculation.riskMoney;
     /*
-     * النسخة الحالية تستخدم قيمة Pip
-     * تقريبية للوت القياسي.
+     * النسخة الحالية تجريبية.
+     *
+     * قيمة الـPip للوت القياسي
+     * محسوبة افتراضيًا بـ $10.
      */
     const pipValue =
       10;
-    /* ---------------------------------------------
-       Calculate P&L
-    --------------------------------------------- */
     const pnl =
       result === "WIN"
         ? lot *
@@ -291,7 +280,7 @@ export default function Page() {
         pnl.toFixed(2)
       );
     /* ---------------------------------------------
-       New balance
+       New Balance
     --------------------------------------------- */
     const newBalance =
       Number(
@@ -301,7 +290,7 @@ export default function Page() {
         ).toFixed(2)
       );
     /* ---------------------------------------------
-       Create trade
+       New Trade
     --------------------------------------------- */
     const trade: Trade = {
       id:
@@ -327,14 +316,14 @@ export default function Page() {
         ),
     };
     /* ---------------------------------------------
-       Add trade
+       Trades
     --------------------------------------------- */
     const trades = [
       ...session.trades,
       trade,
     ];
     /* ---------------------------------------------
-       Calculate next risk
+       Calculate Next Risk
     --------------------------------------------- */
     const nextRisk =
       calculateRisk({
@@ -354,7 +343,7 @@ export default function Page() {
           ),
       });
     /* ---------------------------------------------
-       Determine session status
+       Session Protection
     --------------------------------------------- */
     const profit =
       newBalance -
@@ -366,12 +355,12 @@ export default function Page() {
       profit >= session.target;
     const maxLossReached =
       loss >= session.maxLoss;
-    const completed =
+    const sessionComplete =
       targetReached ||
       maxLossReached ||
       !nextRisk.shouldTrade;
     /* ---------------------------------------------
-       Update session
+       Update Session
     --------------------------------------------- */
     const updatedSession: Session = {
       ...session,
@@ -382,7 +371,7 @@ export default function Page() {
         ),
       trades,
       status:
-        completed
+        sessionComplete
           ? "complete"
           : "active",
     };
@@ -391,20 +380,23 @@ export default function Page() {
     );
   }
   /* =======================================================
-     Start New Session
+     Navigation
   ======================================================= */
-  function handleNewSession() {
+  function goDashboard() {
+    setScreen("dashboard");
+  }
+  function goNewSession() {
     setScreen("new");
   }
-  /* =======================================================
-     Continue Session
-  ======================================================= */
-  function handleContinue() {
+  function goActiveSession() {
     if (!session) {
       setScreen("new");
       return;
     }
     setScreen("active");
+  }
+  function goHistory() {
+    setScreen("history");
   }
   /* =======================================================
      Clear Session
@@ -433,7 +425,7 @@ export default function Page() {
     );
   }
   /* =======================================================
-     DASHBOARD
+     Dashboard
   ======================================================= */
   if (
     screen === "dashboard"
@@ -444,19 +436,19 @@ export default function Page() {
           session
         }
         onNewSession={
-          handleNewSession
+          goNewSession
         }
         onContinue={
-          handleContinue
+          goActiveSession
         }
-        onHistory={() =>
-          setScreen("history")
+        onHistory={
+          goHistory
         }
       />
     );
   }
   /* =======================================================
-     NEW SESSION
+     New Session
   ======================================================= */
   if (
     screen === "new"
@@ -519,12 +511,10 @@ export default function Page() {
             tp: value,
           })
         }
-        onBack={() =>
-          setScreen(
-            session
-              ? "active"
-              : "dashboard"
-          )
+        onBack={
+          session
+            ? goActiveSession
+            : goDashboard
         }
         onStart={
           handleStartSession
@@ -533,7 +523,7 @@ export default function Page() {
     );
   }
   /* =======================================================
-     TRADE HISTORY
+     History
   ======================================================= */
   if (
     screen === "history"
@@ -543,12 +533,10 @@ export default function Page() {
         session={
           session
         }
-        onBack={() =>
-          setScreen(
-            session
-              ? "active"
-              : "dashboard"
-          )
+        onBack={
+          session
+            ? goActiveSession
+            : goDashboard
         }
         onClear={
           handleClearSession
@@ -557,14 +545,21 @@ export default function Page() {
     );
   }
   /* =======================================================
-     ACTIVE SESSION
+     Active Session
   ======================================================= */
   if (
     screen === "active" &&
     session &&
-    risk &&
-    recommendation
+    risk
   ) {
+    const recommendation = {
+      lot:
+        lotCalculation?.lot ?? 0,
+      riskMoney:
+        lotCalculation?.riskMoney ?? 0,
+      potential:
+        lotCalculation?.potentialProfit ?? 0,
+    };
     return (
       <ActiveSession
         session={
@@ -573,31 +568,26 @@ export default function Page() {
         riskPct={
           risk.currentRiskPercent
         }
-        recommendation={{
-          lot:
-            recommendation.lot,
-          riskMoney:
-            recommendation.riskMoney,
-          potential:
-            recommendation.potentialProfit,
-        }}
-        onBack={() =>
-          setScreen("dashboard")
+        recommendation={
+          recommendation
+        }
+        onBack={
+          goDashboard
         }
         onResult={
           handleTradeResult
         }
-        onHistory={() =>
-          setScreen("history")
+        onHistory={
+          goHistory
         }
         onNewSession={
-          handleNewSession
+          goNewSession
         }
       />
     );
   }
   /* =======================================================
-     FALLBACK
+     Fallback
   ======================================================= */
   return (
     <main className="flex min-h-screen items-center justify-center bg-[#07090d] px-5 text-white">
@@ -606,16 +596,16 @@ export default function Page() {
           FOREX RISK
         </div>
         <h1 className="mt-3 text-xl font-black">
-          لا توجد جلسة نشطة
+          Forex Risk Manager
         </h1>
         <p className="mt-2 text-xs leading-5 text-white/35">
-          ابدأ جلسة جديدة لحساب
-          حجم المخاطرة واللوت.
+          ابدأ جلسة تداول جديدة
+          لحساب المخاطرة واللوت.
         </p>
         <button
           type="button"
           onClick={
-            handleNewSession
+            goNewSession
           }
           className="mt-6 h-13 w-full rounded-2xl bg-emerald-400 text-sm font-black text-[#04120c]"
         >
