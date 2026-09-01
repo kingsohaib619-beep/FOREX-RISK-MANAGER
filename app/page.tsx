@@ -94,9 +94,7 @@ const [session, setSession] =
 useState<Session | null>(null);
 
 const [form, setForm] =
-useState(
-INITIAL_FORM
-);
+useState(INITIAL_FORM);
 
 const [ready, setReady] =
 useState(false);
@@ -109,12 +107,8 @@ useEffect(() => {
 const stored = loadSession();
 
 if (stored) {
-  setSession(
-    stored as Session
-  );
-  if (
-    stored.status === "active"
-  ) {
+  setSession(stored as Session);
+  if (stored.status === "active") {
     setScreen("active");
   }
 }
@@ -135,108 +129,91 @@ if (session) {
   saveSession(session);
 }
 
-}, [
-session,
-ready,
-]);
+}, [session, ready]);
 
 /* =======================================================
 Risk Engine
 ======================================================= */
 
-const risk =
-useMemo(() => {
+const risk = useMemo(() => {
 if (!session) {
 return null;
 }
 
-  return calculateRisk({
-    balance:
-      session.balance,
-    startBalance:
-      session.startBalance,
-    target:
-      session.target,
-    maxLoss:
-      session.maxLoss,
-    baseRiskPercent:
-      session.baseRisk,
-    trades:
-      session.trades.map(
-        (trade) =>
-          trade.result
-      ),
-  });
-}, [
-  session,
-]);
+return calculateRisk({
+  balance: session.balance,
+  startBalance:
+    session.startBalance,
+  target:
+    session.target,
+  maxLoss:
+    session.maxLoss,
+  baseRiskPercent:
+    session.baseRisk,
+  trades:
+    session.trades.map(
+      (trade) => trade.result
+    ),
+});
+
+}, [session]);
 
 /* =======================================================
 Trading Calculation
 ======================================================= */
 
-const tradingCalculation =
-useMemo(() => {
-if (
-!session ||
-!risk
-) {
+const tradingCalculation = useMemo(() => {
+if (!session || !risk) {
 return null;
 }
 
-  if (
-    !risk.shouldTrade
-  ) {
-    return null;
-  }
-  const sessionWithTrading =
-    session as Session & {
-      accountType?: AccountType;
-      payout?: number;
-      pipValuePerStandardLot?: number;
-      minLot?: number;
-      maxLot?: number;
-      lotStep?: number;
-    };
-  const accountType =
-    sessionWithTrading.accountType ??
-    "QT_REAL";
-  const payout =
-    sessionWithTrading.payout ??
-    92;
-  const pipValue =
-    sessionWithTrading.pipValuePerStandardLot ??
-    10;
-  const minLot =
-    sessionWithTrading.minLot ??
-    0.01;
-  const maxLot =
-    sessionWithTrading.maxLot ??
-    100;
-  const lotStep =
-    sessionWithTrading.lotStep ??
-    0.01;
-  return calculateTrading({
-    accountType,
-    balance:
-      session.balance,
-    riskPercent:
-      risk.currentRiskPercent,
-    payout,
-    stopLossPips:
-      session.sl,
-    takeProfitPips:
-      session.tp,
-    pipValuePerStandardLot:
-      pipValue,
-    minLot,
-    maxLot,
-    lotStep,
-  });
-}, [
-  session,
-  risk,
-]);
+if (!risk.shouldTrade) {
+  return null;
+}
+const storedSession = session as Session & {
+  accountType?: AccountType;
+  payout?: number;
+  pipValuePerStandardLot?: number;
+  minLot?: number;
+  maxLot?: number;
+  lotStep?: number;
+};
+const accountType =
+  storedSession.accountType ??
+  "QT_REAL";
+const payout =
+  storedSession.payout ??
+  92;
+const pipValuePerStandardLot =
+  storedSession.pipValuePerStandardLot ??
+  10;
+const minLot =
+  storedSession.minLot ??
+  0.01;
+const maxLot =
+  storedSession.maxLot ??
+  100;
+const lotStep =
+  storedSession.lotStep ??
+  0.01;
+return calculateTrading({
+  accountType,
+  balance:
+    session.balance,
+  riskPercent:
+    risk.currentRiskPercent,
+  payout,
+  stopLossPips:
+    session.sl,
+  takeProfitPips:
+    session.tp,
+  pipValuePerStandardLot,
+  minLot,
+  maxLot,
+  lotStep,
+});
+
+}, [session, risk]);
 
 /* =======================================================
 Create Session
@@ -259,7 +236,7 @@ const tp =
 const payout =
   Number(form.payout);
 /* ---------------------------------------------
-   Validation
+   Basic Validation
 --------------------------------------------- */
 if (
   !Number.isFinite(balance) ||
@@ -298,25 +275,23 @@ if (
   return;
 }
 /* ---------------------------------------------
-   Payout validation only for
-   Pocket Option QT accounts
+   Pocket Option Payout Validation
 --------------------------------------------- */
-const requiresPayout =
+const isPocketOption =
   form.accountType === "QT_REAL" ||
   form.accountType === "QT_DEMO" ||
   form.accountType === "TOURNAMENT";
-if (
-  requiresPayout &&
-  (
+if (isPocketOption) {
+  if (
     !Number.isFinite(payout) ||
     payout <= 0 ||
     payout > 100
-  )
-) {
-  return;
+  ) {
+    return;
+  }
 }
 /* ---------------------------------------------
-   Create Session
+   New Session
 --------------------------------------------- */
 const newSession = {
   balance,
@@ -337,9 +312,9 @@ const newSession = {
   accountType:
     form.accountType,
   payout:
-    requiresPayout
+    isPocketOption
       ? payout
-      : 92,
+      : 0,
   pipValuePerStandardLot:
     10,
   minLot:
@@ -349,12 +324,8 @@ const newSession = {
   lotStep:
     0.01,
 } as Session;
-setSession(
-  newSession
-);
-setScreen(
-  "active"
-);
+setSession(newSession);
+setScreen("active");
 
 }
 
@@ -365,12 +336,10 @@ Form Update
 function updateForm(
 values: Partial
 ) {
-setForm(
-(current) => ({
+setForm((current) => ({
 …current,
 …values,
-})
-);
+}));
 }
 
 /* =======================================================
@@ -388,14 +357,10 @@ if (
 return;
 }
 
-if (
-  !risk.shouldTrade
-) {
+if (!risk.shouldTrade) {
   return;
 }
-if (
-  !tradingCalculation.isValid
-) {
+if (!tradingCalculation.isValid) {
   return;
 }
 /* ---------------------------------------------
@@ -406,11 +371,15 @@ const pnl =
     ? tradingCalculation.potentialProfit
     : -tradingCalculation.potentialLoss;
 const safePnl =
-  Number(
-    pnl.toFixed(2)
-  );
+  Number(pnl.toFixed(2));
+/* ---------------------------------------------
+   Lot
+--------------------------------------------- */
 const lot =
   tradingCalculation.lot;
+/* ---------------------------------------------
+   Risk Money
+--------------------------------------------- */
 const riskMoney =
   tradingCalculation.riskMoney;
 /* ---------------------------------------------
@@ -428,8 +397,7 @@ const newBalance =
 --------------------------------------------- */
 const trade: Trade = {
   id:
-    session.trades.length +
-    1,
+    session.trades.length + 1,
   pair:
     session.pair,
   lot,
@@ -445,10 +413,8 @@ const trade: Trade = {
     new Date().toLocaleTimeString(
       "ar-DZ",
       {
-        hour:
-          "2-digit",
-        minute:
-          "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
       }
     ),
 };
@@ -460,7 +426,7 @@ const trades = [
   trade,
 ];
 /* ---------------------------------------------
-   Next Risk
+   Calculate Next Risk
 --------------------------------------------- */
 const nextRisk =
   calculateRisk({
@@ -490,11 +456,9 @@ const loss =
   session.startBalance -
   newBalance;
 const targetReached =
-  profit >=
-  session.target;
+  profit >= session.target;
 const maxLossReached =
-  loss >=
-  session.maxLoss;
+  loss >= session.maxLoss;
 const sessionComplete =
   targetReached ||
   maxLossReached ||
@@ -515,9 +479,7 @@ const updatedSession = {
       ? "complete"
       : "active",
 } as Session;
-setSession(
-  updatedSession
-);
+setSession(updatedSession);
 
 }
 
@@ -526,35 +488,25 @@ Navigation
 ======================================================= */
 
 function goDashboard() {
-setScreen(
-“dashboard”
-);
+setScreen(“dashboard”);
 }
 
 function goNewSession() {
-setScreen(
-“new”
-);
+setScreen(“new”);
 }
 
 function goActiveSession() {
 if (!session) {
-setScreen(
-“new”
-);
-
-  return;
+setScreen(“new”);
+return;
 }
-setScreen(
-  "active"
-);
+
+setScreen("active");
 
 }
 
 function goHistory() {
-setScreen(
-“history”
-);
+setScreen(“history”);
 }
 
 /* =======================================================
@@ -564,15 +516,9 @@ Clear Session
 function handleClearSession() {
 clearSession();
 
-setSession(
-  null
-);
-setForm(
-  INITIAL_FORM
-);
-setScreen(
-  "dashboard"
-);
+setSession(null);
+setForm(INITIAL_FORM);
+setScreen("dashboard");
 
 }
 
@@ -582,8 +528,6 @@ Loading
 
 if (!ready) {
 return (
-    <div className="text-center">
-      <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white/10 border-t-emerald-400" />
       <p className="mt-4 text-xs text-white/30">
         جاري تحميل التطبيق...
       </p>
@@ -597,14 +541,10 @@ return (
 Dashboard
 ======================================================= */
 
-if (
-screen === “dashboard”
-) {
+if (screen === “dashboard”) {
 return (
 <Dashboard
-session={
-session
-}
+session={session}
 
     onNewSession={
       goNewSession
@@ -624,101 +564,90 @@ session
 New Session
 ======================================================= */
 
-if (
-screen === “new”
-) {
+if (screen === “new”) {
 return (
 <NewSession
 accountType={
 form.accountType
 }
 
-    setAccountType={
-      (value) =>
-        updateForm({
-          accountType:
-            value,
-        })
+    setAccountType={(value) =>
+      updateForm({
+        accountType:
+          value,
+      })
     }
     balance={
       form.balance
     }
-    setBalance={
-      (value) =>
-        updateForm({
-          balance:
-            value,
-        })
+    setBalance={(value) =>
+      updateForm({
+        balance:
+          value,
+      })
     }
     target={
       form.target
     }
-    setTarget={
-      (value) =>
-        updateForm({
-          target:
-            value,
-        })
+    setTarget={(value) =>
+      updateForm({
+        target:
+          value,
+      })
     }
     maxLoss={
       form.maxLoss
     }
-    setMaxLoss={
-      (value) =>
-        updateForm({
-          maxLoss:
-            value,
-        })
+    setMaxLoss={(value) =>
+      updateForm({
+        maxLoss:
+          value,
+      })
     }
     risk={
       form.risk
     }
-    setRisk={
-      (value) =>
-        updateForm({
-          risk:
-            value,
-        })
+    setRisk={(value) =>
+      updateForm({
+        risk:
+          value,
+      })
     }
     pair={
       form.pair
     }
-    setPair={
-      (value) =>
-        updateForm({
-          pair:
-            value,
-        })
+    setPair={(value) =>
+      updateForm({
+        pair:
+          value,
+      })
     }
     sl={
       form.sl
     }
-    setSl={
-      (value) =>
-        updateForm({
-          sl:
-            value,
-        })
+    setSl={(value) =>
+      updateForm({
+        sl:
+          value,
+      })
     }
     tp={
       form.tp
     }
-    setTp={
-      (value) =>
-        updateForm({
-          tp:
-            value,
-        })
+    setTp={(value) =>
+      updateForm({
+        tp:
+          value,
+      })
     }
     payout={
       form.payout
     }
-    setPayout={
-      (value) =>
-        updateForm({
-          payout:
-            value,
-        })
+    setPayout={(value) =>
+      updateForm({
+        payout:
+          value,
+      })
     }
     onBack={
       session
@@ -737,14 +666,10 @@ form.accountType
 History
 ======================================================= */
 
-if (
-screen === “history”
-) {
+if (screen === “history”) {
 return (
 <TradeHistory
-session={
-session
-}
+session={session}
 
     onBack={
       session
@@ -813,10 +738,7 @@ Fallback
 ======================================================= */
 
 return (
-  <div className="w-full max-w-md rounded-[28px] border border-white/[0.08] bg-[#0f1319] p-6 text-center">
-    <div className="text-[10px] font-bold tracking-[0.25em] text-emerald-400">
-      FOREX RISK
-    </div>
+FOREX RISK
     <h1 className="mt-3 text-xl font-black">
       Forex Risk Manager
     </h1>
