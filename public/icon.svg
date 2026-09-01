@@ -1,0 +1,46 @@
+<svg
+  width="64"
+  height="64"
+  viewBox="0 0 64 64"
+  fill="none"
+  xmlns="http://www.w3.org/2000/svg"
+>
+  <rect
+    width="64"
+    height="64"
+    rx="18"
+    fill="#0F1319"
+  />
+  <path
+    d="M17 42L25 32L32 37L47 20"
+    stroke="#34D399"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M39 20H47V28"
+    stroke="#34D399"
+    stroke-width="4"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <circle
+    cx="17"
+    cy="42"
+    r="3"
+    fill="#34D399"
+  />
+  <circle
+    cx="25"
+    cy="32"
+    r="3"
+    fill="#34D399"
+  />
+  <circle
+    cx="32"
+    cy="37"
+    r="3"
+    fill="#34D399"
+  />
+</svg>
