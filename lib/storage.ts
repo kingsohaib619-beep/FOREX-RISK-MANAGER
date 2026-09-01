@@ -1,16 +1,14 @@
 /**
- * Local Storage Manager
- *
- * يحفظ بيانات Forex Risk Manager
- * داخل متصفح المستخدم.
+ * Forex Risk Manager
+ * Local Storage
  */
 export const SESSION_STORAGE_KEY =
   "forex-risk-manager-session";
 export const SETTINGS_STORAGE_KEY =
   "forex-risk-manager-settings";
-/**
- * نوع الصفقة.
- */
+/* =========================================================
+   Trade
+========================================================= */
 export type StoredTrade = {
   id: number;
   pair: string;
@@ -22,9 +20,9 @@ export type StoredTrade = {
   pnl: number;
   time: string;
 };
-/**
- * نوع الجلسة.
- */
+/* =========================================================
+   Session
+========================================================= */
 export type StoredSession = {
   balance: number;
   startBalance: number;
@@ -38,18 +36,18 @@ export type StoredSession = {
   createdAt: string;
   status: "active" | "complete";
 };
-/**
- * التأكد من أننا في المتصفح.
- */
+/* =========================================================
+   Browser Check
+========================================================= */
 function isBrowser(): boolean {
   return (
     typeof window !== "undefined" &&
     typeof window.localStorage !== "undefined"
   );
 }
-/**
- * حفظ الجلسة.
- */
+/* =========================================================
+   Save Session
+========================================================= */
 export function saveSession(
   session: StoredSession
 ): boolean {
@@ -57,22 +55,22 @@ export function saveSession(
     return false;
   }
   try {
-    localStorage.setItem(
+    window.localStorage.setItem(
       SESSION_STORAGE_KEY,
       JSON.stringify(session)
     );
     return true;
   } catch (error) {
     console.error(
-      "Failed to save session:",
+      "Forex Risk Manager: failed to save session",
       error
     );
     return false;
   }
 }
-/**
- * قراءة الجلسة.
- */
+/* =========================================================
+   Load Session
+========================================================= */
 export function loadSession():
   | StoredSession
   | null {
@@ -81,50 +79,63 @@ export function loadSession():
   }
   try {
     const raw =
-      localStorage.getItem(
+      window.localStorage.getItem(
         SESSION_STORAGE_KEY
       );
     if (!raw) {
       return null;
     }
-    const session = JSON.parse(
-      raw
-    ) as StoredSession;
-    if (!isValidSession(session)) {
+    const parsed: unknown =
+      JSON.parse(raw);
+    if (!isValidSession(parsed)) {
+      window.localStorage.removeItem(
+        SESSION_STORAGE_KEY
+      );
       return null;
     }
-    return session;
+    return parsed;
   } catch (error) {
     console.error(
-      "Failed to load session:",
+      "Forex Risk Manager: failed to load session",
       error
     );
+    /*
+     * إذا كانت البيانات القديمة تالفة،
+     * نحذفها حتى لا يبقى التطبيق عالقًا.
+     */
+    try {
+      window.localStorage.removeItem(
+        SESSION_STORAGE_KEY
+      );
+    } catch {
+      // Ignore storage errors
+    }
     return null;
   }
 }
-/**
- * حذف الجلسة.
- */
+/* =========================================================
+   Clear Session
+========================================================= */
 export function clearSession(): boolean {
   if (!isBrowser()) {
     return false;
   }
   try {
-    localStorage.removeItem(
+    window.localStorage.removeItem(
       SESSION_STORAGE_KEY
     );
     return true;
   } catch (error) {
     console.error(
-      "Failed to clear session:",
+      "Forex Risk Manager: failed to clear session",
       error
     );
     return false;
   }
 }
-/**
- * تحديث الجلسة.
- */
+/* =========================================================
+   Update Session
+========================================================= */
 export function updateSession(
   updater: (
     session: StoredSession
@@ -142,9 +153,9 @@ export function updateSession(
   saveSession(updated);
   return updated;
 }
-/**
- * إضافة صفقة للجلسة.
- */
+/* =========================================================
+   Add Trade
+========================================================= */
 export function addTrade(
   trade: StoredTrade
 ):
@@ -160,11 +171,13 @@ export function addTrade(
     })
   );
 }
-/**
- * تغيير حالة الجلسة.
- */
+/* =========================================================
+   Session Status
+========================================================= */
 export function setSessionStatus(
-  status: "active" | "complete"
+  status:
+    | "active"
+    | "complete"
 ):
   | StoredSession
   | null {
@@ -175,9 +188,9 @@ export function setSessionStatus(
     })
   );
 }
-/**
- * حفظ إعدادات عامة.
- */
+/* =========================================================
+   Settings
+========================================================= */
 export function saveSettings<
   T extends Record<string, unknown>
 >(
@@ -187,22 +200,22 @@ export function saveSettings<
     return false;
   }
   try {
-    localStorage.setItem(
+    window.localStorage.setItem(
       SETTINGS_STORAGE_KEY,
       JSON.stringify(settings)
     );
     return true;
   } catch (error) {
     console.error(
-      "Failed to save settings:",
+      "Forex Risk Manager: failed to save settings",
       error
     );
     return false;
   }
 }
-/**
- * قراءة الإعدادات.
- */
+/* =========================================================
+   Load Settings
+========================================================= */
 export function loadSettings<
   T extends Record<string, unknown>
 >(): T | null {
@@ -211,7 +224,7 @@ export function loadSettings<
   }
   try {
     const raw =
-      localStorage.getItem(
+      window.localStorage.getItem(
         SETTINGS_STORAGE_KEY
       );
     if (!raw) {
@@ -220,73 +233,77 @@ export function loadSettings<
     return JSON.parse(raw) as T;
   } catch (error) {
     console.error(
-      "Failed to load settings:",
+      "Forex Risk Manager: failed to load settings",
       error
     );
     return null;
   }
 }
-/**
- * التحقق من صحة الجلسة.
- */
+/* =========================================================
+   Validation
+========================================================= */
 function isValidSession(
-  session: StoredSession
-): boolean {
-  if (!session) {
+  value: unknown
+): value is StoredSession {
+  if (
+    typeof value !== "object" ||
+    value === null
+  ) {
     return false;
   }
+  const session =
+    value as Record<string, unknown>;
   if (
-    typeof session.balance !==
-      "number" ||
+    typeof session.balance !== "number" ||
+    !Number.isFinite(session.balance) ||
     session.balance <= 0
   ) {
     return false;
   }
   if (
-    typeof session.startBalance !==
-      "number" ||
+    typeof session.startBalance !== "number" ||
+    !Number.isFinite(session.startBalance) ||
     session.startBalance <= 0
   ) {
     return false;
   }
   if (
-    typeof session.target !==
-      "number" ||
+    typeof session.target !== "number" ||
+    !Number.isFinite(session.target) ||
     session.target < 0
   ) {
     return false;
   }
   if (
-    typeof session.maxLoss !==
-      "number" ||
+    typeof session.maxLoss !== "number" ||
+    !Number.isFinite(session.maxLoss) ||
     session.maxLoss < 0
   ) {
     return false;
   }
   if (
-    typeof session.baseRisk !==
-      "number" ||
+    typeof session.baseRisk !== "number" ||
+    !Number.isFinite(session.baseRisk) ||
     session.baseRisk <= 0
   ) {
     return false;
   }
   if (
-    typeof session.pair !==
-      "string" ||
-    session.pair.length === 0
+    typeof session.pair !== "string" ||
+    session.pair.trim().length === 0
   ) {
     return false;
   }
   if (
-    typeof session.sl !==
-      "number" ||
+    typeof session.sl !== "number" ||
+    !Number.isFinite(session.sl) ||
     session.sl <= 0
   ) {
     return false;
   }
   if (
-    typeof session.tp !==
-      "number" ||
+    typeof session.tp !== "number" ||
+    !Number.isFinite(session.tp) ||
     session.tp <= 0
   ) {
     return false;
@@ -299,6 +316,11 @@ function isValidSession(
   if (
     session.status !== "active" &&
     session.status !== "complete"
+  ) {
+    return false;
+  }
+  if (
+    typeof session.createdAt !== "string"
   ) {
     return false;
   }
