@@ -11,7 +11,8 @@ import type {
 } from "@/components/ActiveSession";
 import type { Pair } from "@/components/NewSession";
 import {
-  calculateLot,
+  calculateTrading,
+  type AccountType,
 } from "@/lib/lot-calculator";
 import {
   calculateRisk,
@@ -33,6 +34,7 @@ type Screen =
    New Session Form
 ========================================================= */
 type SessionForm = {
+  accountType: AccountType;
   balance: string;
   target: string;
   maxLoss: string;
@@ -40,11 +42,16 @@ type SessionForm = {
   pair: Pair;
   sl: string;
   tp: string;
+  payout: string;
+  entryPrice: string;
+  stopLossPrice: string;
+  takeProfitPrice: string;
 };
 /* =========================================================
    Initial Form
 ========================================================= */
 const INITIAL_FORM: SessionForm = {
+  accountType: "QT_REAL",
   balance: "1000",
   target: "50",
   maxLoss: "30",
@@ -52,6 +59,10 @@ const INITIAL_FORM: SessionForm = {
   pair: "EUR/USD",
   sl: "20",
   tp: "40",
+  payout: "92",
+  entryPrice: "",
+  stopLossPrice: "",
+  takeProfitPrice: "",
 };
 /* =========================================================
    Page
@@ -62,7 +73,9 @@ export default function Page() {
   const [session, setSession] =
     useState<Session | null>(null);
   const [form, setForm] =
-    useState<SessionForm>(INITIAL_FORM);
+    useState<SessionForm>(
+      INITIAL_FORM
+    );
   const [ready, setReady] =
     useState(false);
   /* =======================================================
@@ -71,8 +84,12 @@ export default function Page() {
   useEffect(() => {
     const stored = loadSession();
     if (stored) {
-      setSession(stored as Session);
-      if (stored.status === "active") {
+      setSession(
+        stored as Session
+      );
+      if (
+        stored.status === "active"
+      ) {
         setScreen("active");
       }
     }
@@ -88,7 +105,10 @@ export default function Page() {
     if (session) {
       saveSession(session);
     }
-  }, [session, ready]);
+  }, [
+    session,
+    ready,
+  ]);
   /* =======================================================
      Risk Engine
   ======================================================= */
@@ -109,38 +129,102 @@ export default function Page() {
         session.baseRisk,
       trades:
         session.trades.map(
-          (trade) => trade.result
+          (trade) =>
+            trade.result
         ),
     });
   }, [session]);
   /* =======================================================
-     Lot Calculation
+     Unified Trading Calculation
   ======================================================= */
-  const lotCalculation =
+  const tradingCalculation =
     useMemo(() => {
-      if (!session || !risk) {
+      if (
+        !session ||
+        !risk
+      ) {
         return null;
       }
-      if (!risk.shouldTrade) {
+      if (
+        !risk.shouldTrade
+      ) {
         return null;
       }
-      return calculateLot({
+      const accountType =
+        (
+          session as Session & {
+            accountType?: AccountType;
+          }
+        ).accountType ??
+        "MT5_REAL";
+      return calculateTrading({
+        accountType,
         balance:
           session.balance,
         riskPercent:
           risk.currentRiskPercent,
+        payout:
+          (
+            session as Session & {
+              payout?: number;
+            }
+          ).payout ?? 92,
         stopLossPips:
           session.sl,
+        takeProfitPips:
+          session.tp,
         pipValuePerStandardLot:
+          (
+            session as Session & {
+              pipValuePerStandardLot?: number;
+            }
+          ).pipValuePerStandardLot ??
           10,
         minLot:
+          (
+            session as Session & {
+              minLot?: number;
+            }
+          ).minLot ??
           0.01,
         maxLot:
+          (
+            session as Session & {
+              maxLot?: number;
+            }
+          ).maxLot ??
           100,
         lotStep:
+          (
+            session as Session & {
+              lotStep?: number;
+            }
+          ).lotStep ??
           0.01,
+        entryPrice:
+          (
+            session as Session & {
+              entryPrice?: number;
+            }
+          ).entryPrice,
+        stopLossPrice:
+          (
+            session as Session & {
+              stopLossPrice?: number;
+            }
+          ).stopLossPrice,
+        takeProfitPrice:
+          (
+            session as Session & {
+              takeProfitPrice?: number;
+            }
+          ).takeProfitPrice,
+        direction: "LONG",
       });
-    }, [session, risk]);
+    }, [
+      session,
+      risk,
+    ]);
   /* =======================================================
      Create Session
   ======================================================= */
@@ -157,6 +241,18 @@ export default function Page() {
       Number(form.sl);
     const tp =
       Number(form.tp);
+    const payout =
+      Number(form.payout);
+    const entryPrice =
+      Number(form.entryPrice);
+    const stopLossPrice =
+      Number(
+        form.stopLossPrice
+      );
+    const takeProfitPrice =
+      Number(
+        form.takeProfitPrice
+      );
     /* ---------------------------------------------
        Validation
     --------------------------------------------- */
@@ -184,6 +280,13 @@ export default function Page() {
     ) {
       return;
     }
+    /*
+     * SL/TP ضروريان لـ Forex.
+     *
+     * QT لا يحتاج SL حقيقي،
+     * لكن نحافظ على الحقول القديمة
+     * حتى لا نكسر الواجهة الحالية.
+     */
     if (
       !Number.isFinite(sl) ||
       sl <= 0
@@ -199,23 +302,72 @@ export default function Page() {
     /* ---------------------------------------------
        New Session
     --------------------------------------------- */
-    const newSession: Session = {
-      balance,
-      startBalance:
+    const newSession =
+      {
         balance,
-      target,
-      maxLoss,
-      baseRisk,
-      pair:
-        form.pair,
-      sl,
-      tp,
-      trades: [],
-      createdAt:
-        new Date().toISOString(),
-      status:
-        "active",
-    };
+        startBalance:
+          balance,
+        target,
+        maxLoss,
+        baseRisk,
+        pair:
+          form.pair,
+        sl,
+        tp,
+        trades: [],
+        createdAt:
+          new Date().toISOString(),
+        status:
+          "active",
+        /*
+         * الحساب المختار.
+         */
+        accountType:
+          form.accountType,
+        /*
+         * QT payout.
+         */
+        payout:
+          Number.isFinite(payout) &&
+          payout > 0
+            ? payout
+            : 92,
+        /*
+         * Forex defaults.
+         */
+        pipValuePerStandardLot:
+          10,
+        minLot:
+          0.01,
+        maxLot:
+          100,
+        lotStep:
+          0.01,
+        /*
+         * Shares.
+         */
+        entryPrice:
+          Number.isFinite(
+            entryPrice
+          ) &&
+          entryPrice > 0
+            ? entryPrice
+            : undefined,
+        stopLossPrice:
+          Number.isFinite(
+            stopLossPrice
+          ) &&
+          stopLossPrice > 0
+            ? stopLossPrice
+            : undefined,
+        takeProfitPrice:
+          Number.isFinite(
+            takeProfitPrice
+          ) &&
+          takeProfitPrice > 0
+            ? takeProfitPrice
+            : undefined,
+      } as Session;
     setSession(
       newSession
     );
@@ -243,7 +395,7 @@ export default function Page() {
     if (
       !session ||
       !risk ||
-      !lotCalculation
+      !tradingCalculation
     ) {
       return;
     }
@@ -253,28 +405,71 @@ export default function Page() {
       return;
     }
     if (
-      !lotCalculation.isValid
+      !tradingCalculation.isValid
     ) {
       return;
     }
-    const lot =
-      lotCalculation.lot;
-    const riskMoney =
-      lotCalculation.riskMoney;
+    const accountType =
+      (
+        session as Session & {
+          accountType?: AccountType;
+        }
+      ).accountType ??
+      "MT5_REAL";
+    /* ---------------------------------------------
+       Calculate PNL by account type
+    --------------------------------------------- */
+    let pnl = 0;
+    let riskMoney =
+      tradingCalculation.riskMoney;
+    let lot =
+      tradingCalculation.lot;
     /*
-     * النسخة الحالية تجريبية.
-     *
-     * قيمة الـPip للوت القياسي
-     * محسوبة افتراضيًا بـ $10.
+     * QT
      */
-    const pipValue =
-      10;
-    const pnl =
-      result === "WIN"
-        ? lot *
-          session.tp *
-          pipValue
-        : -riskMoney;
+    if (
+      accountType === "QT_REAL" ||
+      accountType === "QT_DEMO" ||
+      accountType === "TOURNAMENT"
+    ) {
+      pnl =
+        result === "WIN"
+          ? tradingCalculation
+              .potentialProfit
+          : -tradingCalculation
+              .potentialLoss;
+    }
+    /*
+     * Forex
+     */
+    else if (
+      accountType === "MT4_REAL" ||
+      accountType === "MT4_DEMO" ||
+      accountType === "MT5_REAL" ||
+      accountType === "MT5_DEMO"
+    ) {
+      pnl =
+        result === "WIN"
+          ? tradingCalculation
+              .potentialProfit
+          : -tradingCalculation
+              .potentialLoss;
+    }
+    /*
+     * Shares
+     */
+    else if (
+      accountType === "SHARES_REAL" ||
+      accountType === "SHARES_DEMO"
+    ) {
+      pnl =
+        result === "WIN"
+          ? tradingCalculation
+              .potentialProfit
+          : -tradingCalculation
+              .potentialLoss;
+      lot = 0;
+    }
     const safePnl =
       Number(
         pnl.toFixed(2)
@@ -294,7 +489,8 @@ export default function Page() {
     --------------------------------------------- */
     const trade: Trade = {
       id:
-        session.trades.length + 1,
+        session.trades.length +
+        1,
       pair:
         session.pair,
       lot,
@@ -310,8 +506,10 @@ export default function Page() {
         new Date().toLocaleTimeString(
           "ar-DZ",
           {
-            hour: "2-digit",
-            minute: "2-digit",
+            hour:
+              "2-digit",
+            minute:
+              "2-digit",
           }
         ),
     };
@@ -339,7 +537,8 @@ export default function Page() {
           session.baseRisk,
         trades:
           trades.map(
-            (item) => item.result
+            (item) =>
+              item.result
           ),
       });
     /* ---------------------------------------------
@@ -352,9 +551,11 @@ export default function Page() {
       session.startBalance -
       newBalance;
     const targetReached =
-      profit >= session.target;
+      profit >=
+      session.target;
     const maxLossReached =
-      loss >= session.maxLoss;
+      loss >=
+      session.maxLoss;
     const sessionComplete =
       targetReached ||
       maxLossReached ||
@@ -362,19 +563,20 @@ export default function Page() {
     /* ---------------------------------------------
        Update Session
     --------------------------------------------- */
-    const updatedSession: Session = {
-      ...session,
-      balance:
-        Math.max(
-          0,
-          newBalance
-        ),
-      trades,
-      status:
-        sessionComplete
-          ? "complete"
-          : "active",
-    };
+    const updatedSession =
+      {
+        ...session,
+        balance:
+          Math.max(
+            0,
+            newBalance
+          ),
+        trades,
+        status:
+          sessionComplete
+            ? "complete"
+            : "active",
+      } as Session;
     setSession(
       updatedSession
     );
@@ -383,7 +585,9 @@ export default function Page() {
      Navigation
   ======================================================= */
   function goDashboard() {
-    setScreen("dashboard");
+    setScreen(
+      "dashboard"
+    );
   }
   function goNewSession() {
     setScreen("new");
@@ -407,7 +611,9 @@ export default function Page() {
     setForm(
       INITIAL_FORM
     );
-    setScreen("dashboard");
+    setScreen(
+      "dashboard"
+    );
   }
   /* =======================================================
      Loading
@@ -460,7 +666,8 @@ export default function Page() {
         }
         setBalance={(value) =>
           updateForm({
-            balance: value,
+            balance:
+              value,
           })
         }
         target={
@@ -468,7 +675,8 @@ export default function Page() {
         }
         setTarget={(value) =>
           updateForm({
-            target: value,
+            target:
+              value,
           })
         }
         maxLoss={
@@ -476,7 +684,8 @@ export default function Page() {
         }
         setMaxLoss={(value) =>
           updateForm({
-            maxLoss: value,
+            maxLoss:
+              value,
           })
         }
         risk={
@@ -484,7 +693,8 @@ export default function Page() {
         }
         setRisk={(value) =>
           updateForm({
-            risk: value,
+            risk:
+              value,
           })
         }
         pair={
@@ -492,7 +702,8 @@ export default function Page() {
         }
         setPair={(value) =>
           updateForm({
-            pair: value,
+            pair:
+              value,
           })
         }
         sl={
@@ -500,7 +711,8 @@ export default function Page() {
         }
         setSl={(value) =>
           updateForm({
-            sl: value,
+            sl:
+              value,
           })
         }
         tp={
@@ -508,7 +720,8 @@ export default function Page() {
         }
         setTp={(value) =>
           updateForm({
-            tp: value,
+            tp:
+              value,
           })
         }
         onBack={
@@ -554,11 +767,14 @@ export default function Page() {
   ) {
     const recommendation = {
       lot:
-        lotCalculation?.lot ?? 0,
+        tradingCalculation?.lot ??
+        0,
       riskMoney:
-        lotCalculation?.riskMoney ?? 0,
+        tradingCalculation?.riskMoney ??
+        0,
       potential:
-        lotCalculation?.potentialProfit ?? 0,
+        tradingCalculation?.potentialProfit ??
+        0,
     };
     return (
       <ActiveSession
