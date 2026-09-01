@@ -1,27 +1,438 @@
 "use client";
-import {useEffect,useMemo,useState} from "react";
-import {ArrowLeft,Calculator,History,Home,Plus,ShieldCheck,TrendingDown,TrendingUp,X,ChevronDown} from "lucide-react";
-type Pair="EUR/USD"|"GBP/USD"|"USD/JPY"|"USD/CHF"|"AUD/USD"|"USD/CAD"|"NZD/USD"|"EUR/GBP";
-type Trade={id:number;pair:Pair;lot:number;risk:number;pnl:number;result:"WIN"|"LOSS";sl:number;tp:number;time:string};
-type Session={start:number;balance:number;target:number;maxLoss:number;baseRisk:number;pair:Pair;sl:number;tp:number;trades:Trade[];status:"active"|"complete"};
-const pairs:Pair[]=["EUR/USD","GBP/USD","USD/JPY","USD/CHF","AUD/USD","USD/CAD","NZD/USD","EUR/GBP"];
-function pipValue(pair:Pair){return pair==="USD/JPY"?6.67:10}
-function lot(pair:Pair,balance:number,riskPct:number,sl:number){if(sl<=0)return 0;return Math.floor((balance*riskPct/100/(sl*pipValue(pair)))*100)/100}
-function Header({title,onBack}:{title:string;onBack?:()=>void}){return <header className="flex items-center justify-between px-5 pb-5 pt-6"><div className="w-10">{onBack&&<button className="icon" onClick={onBack}><ArrowLeft size={18}/></button>}</div><div className="text-center"><div className="text-[10px] font-bold tracking-[.2em] text-emerald-400">FOREX RISK</div><div className="mt-1 text-sm font-bold">{title}</div></div><div className="w-10"/></header>}
-function Nav({history,onHome}:{history:()=>void;onHome:()=>void}){return <nav className="nav"><button className="active" onClick={onHome}><Home size={18} className="mx-auto mb-1"/>الرئيسية</button><button onClick={history}><History size={18} className="mx-auto mb-1"/>السجل</button><button><Calculator size={18} className="mx-auto mb-1"/>حاسبة</button></nav>}
-export default function Page(){
- const [screen,setScreen]=useState<"home"|"new"|"trade"|"history">("home"); const [s,setS]=useState<Session|null>(null); const [ready,setReady]=useState(false);
- const [balance,setBalance]=useState("1000"),[target,setTarget]=useState("50"),[maxLoss,setMaxLoss]=useState("30"),[risk,setRisk]=useState("2"),[pair,setPair]=useState<Pair>("EUR/USD"),[sl,setSl]=useState("20"),[tp,setTp]=useState("40");
- useEffect(()=>{try{const x=localStorage.getItem("frm_session");if(x)setS(JSON.parse(x))}finally{setReady(true)}},[]); useEffect(()=>{if(!ready)return;s?localStorage.setItem("frm_session",JSON.stringify(s)):localStorage.removeItem("frm_session")},[s,ready]);
- const riskNow=useMemo(()=>{if(!s)return 0;let r=s.baseRisk;let streak=0;for(const t of [...s.trades].reverse()){if(t.result!=="LOSS")break;streak++}const profit=s.balance-s.start,loss=s.start-s.balance;if(streak>=3)r*=.5;else if(streak>=2)r*=.75;if(loss>=s.maxLoss*.66)r=Math.min(r,s.baseRisk*.5);if(profit>=s.target*.75)r=Math.min(r,s.baseRisk*.5);return Math.max(.1,r)},[s]);
- const rec=useMemo(()=>s?{lot:lot(s.pair,s.balance,riskNow,s.sl),risk:s.balance*riskNow/100}:null,[s,riskNow]);
- function start(){const b=+balance,t=+target,m=+maxLoss,r=+risk,a=+sl,p=+tp;if([b,t,m,r,a,p].some(x=>!x||x<=0))return;setS({start:b,balance:b,target:t,maxLoss:m,baseRisk:r,pair,sl:a,tp:p,trades:[],status:"active"});setScreen("trade")}
- function result(res:"WIN"|"LOSS"){if(!s||!rec||s.status!=="active")return;const pnl=res==="WIN"?rec.lot*s.tp*pipValue(s.pair):-(rec.risk);const nb=Math.max(0,s.balance+pnl);const tr:Trade={id:s.trades.length+1,pair:s.pair,lot:rec.lot,risk:rec.risk,pnl,result:res,sl:s.sl,tp:s.tp,time:new Date().toLocaleTimeString("ar-DZ",{hour:"2-digit",minute:"2-digit"})};const ns=[...s.trades,tr];setS({...s,balance:nb,trades:ns,status:(nb-s.start>=s.target||s.start-nb>=s.maxLoss)?"complete":"active"})}
- if(!ready)return null; const profit=s?s.balance-s.start:0;
- return <main className="min-h-screen bg-[#07090d] text-white"><div className="mx-auto min-h-screen max-w-md border-x border-white/5 bg-[#0b0e13]">{screen==="home"&&<Home s={s} newSession={()=>setScreen("new")} continueSession={()=>setScreen("trade")} history={()=>setScreen("history")}/>} {screen==="new"&&<New balance={balance} setBalance={setBalance} target={target} setTarget={setTarget} maxLoss={maxLoss} setMaxLoss={setMaxLoss} risk={risk} setRisk={setRisk} pair={pair} setPair={setPair} sl={sl} setSl={setSl} tp={tp} setTp={setTp} back={()=>setScreen("home")} start={start}/>} {screen==="trade"&&s&&rec&&<Trade s={s} rec={rec} riskNow={riskNow} profit={profit} back={()=>setScreen("home")} result={result} history={()=>setScreen("history")} newSession={()=>setScreen("new")}/>} {screen==="history"&&<Hist s={s} back={()=>setScreen(s?"trade":"home")} clear={()=>{setS(null);setScreen("home")}}/>}</div></main>
+import { useEffect, useMemo, useState } from "react";
+import Dashboard from "@/components/Dashboard";
+import NewSession from "@/components/NewSession";
+import ActiveSession, {
+  Session,
+  Trade,
+  TradeResult,
+} from "@/components/ActiveSession";
+import TradeHistory from "@/components/TradeHistory";
+import {
+  calculateLot,
+  LotCalculationResult,
+} from "@/lib/lot-calculator";
+import {
+  calculateRisk,
+  RiskEngineResult,
+} from "@/lib/risk-engine";
+import {
+  loadSession,
+  saveSession,
+  clearSession,
+} from "@/lib/storage";
+/* =========================================================
+   Types
+========================================================= */
+type Screen =
+  | "dashboard"
+  | "new"
+  | "active"
+  | "history";
+type NewSessionData = {
+  balance: number;
+  target: number;
+  maxLoss: number;
+  baseRisk: number;
+  pair: string;
+  sl: number;
+  tp: number;
+};
+/* =========================================================
+   Main App
+========================================================= */
+export default function Home() {
+  const [screen, setScreen] =
+    useState<Screen>("dashboard");
+  const [session, setSession] =
+    useState<Session | null>(null);
+  const [loaded, setLoaded] =
+    useState(false);
+  /* =======================================================
+     Load saved session
+  ======================================================= */
+  useEffect(() => {
+    const saved = loadSession();
+    if (saved) {
+      setSession(saved as Session);
+      if (saved.status === "active") {
+        setScreen("active");
+      }
+    }
+    setLoaded(true);
+  }, []);
+  /* =======================================================
+     Save session automatically
+  ======================================================= */
+  useEffect(() => {
+    if (!loaded || !session) {
+      return;
+    }
+    saveSession(session);
+  }, [session, loaded]);
+  /* =======================================================
+     Risk Engine
+  ======================================================= */
+  const risk: RiskEngineResult | null =
+    useMemo(() => {
+      if (!session) {
+        return null;
+      }
+      return calculateRisk({
+        balance: session.balance,
+        startBalance:
+          session.startBalance,
+        target: session.target,
+        maxLoss: session.maxLoss,
+        baseRiskPercent:
+          session.baseRisk,
+        trades: session.trades.map(
+          (trade) => trade.result
+        ),
+      });
+    }, [session]);
+  /* =======================================================
+     Lot Calculator
+  ======================================================= */
+  const lotCalculation:
+    | LotCalculationResult
+    | null = useMemo(() => {
+    if (!session || !risk) {
+      return null;
+    }
+    if (!risk.shouldTrade) {
+      return null;
+    }
+    return calculateLot({
+      balance: session.balance,
+      riskPercent:
+        risk.currentRiskPercent,
+      stopLossPips:
+        session.sl,
+      pipValuePerStandardLot: 10,
+      minLot: 0.01,
+      maxLot: 100,
+      lotStep: 0.01,
+    });
+  }, [session, risk]);
+  /* =======================================================
+     Create New Session
+  ======================================================= */
+  function handleCreateSession(
+    data: NewSessionData
+  ) {
+    const newSession: Session = {
+      balance: data.balance,
+      startBalance: data.balance,
+      target: data.target,
+      maxLoss: data.maxLoss,
+      baseRisk: data.baseRisk,
+      pair: data.pair,
+      sl: data.sl,
+      tp: data.tp,
+      trades: [],
+      createdAt:
+        new Date().toISOString(),
+      status: "active",
+    };
+    setSession(newSession);
+    setScreen("active");
+  }
+  /* =======================================================
+     Register Trade Result
+  ======================================================= */
+  function handleTradeResult(
+    result: TradeResult
+  ) {
+    if (!session || !lotCalculation) {
+      return;
+    }
+    if (risk && !risk.shouldTrade) {
+      return;
+    }
+    const lot =
+      lotCalculation.lot;
+    const riskMoney =
+      lotCalculation.riskMoney;
+    /*
+     * الربح/الخسارة هنا محسوب بطريقة
+     * مبسطة للنسخة التجريبية.
+     *
+     * WIN:
+     * TP × Pip Value × Lot
+     *
+     * LOSS:
+     * SL × Pip Value × Lot
+     */
+    const pipValue =
+      10;
+    const pnl =
+      result === "WIN"
+        ? lot *
+          session.tp *
+          pipValue
+        : -(
+            lot *
+            session.sl *
+            pipValue
+          );
+    const trade: Trade = {
+      id:
+        session.trades.length + 1,
+      pair:
+        session.pair,
+      lot,
+      riskMoney,
+      sl:
+        session.sl,
+      tp:
+        session.tp,
+      result,
+      pnl:
+        Number(pnl.toFixed(2)),
+      time:
+        new Date().toLocaleTimeString(
+          "ar-DZ",
+          {
+            hour: "2-digit",
+            minute: "2-digit",
+          }
+        ),
+    };
+    const newBalance =
+      Number(
+        (
+          session.balance +
+          pnl
+        ).toFixed(2)
+      );
+    const updatedTrades = [
+      ...session.trades,
+      trade,
+    ];
+    /*
+     * نحسب حالة المخاطر الجديدة
+     * بعد تسجيل الصفقة.
+     */
+    const nextRisk =
+      calculateRisk({
+        balance:
+          newBalance,
+        startBalance:
+          session.startBalance,
+        target:
+          session.target,
+        maxLoss:
+          session.maxLoss,
+        baseRiskPercent:
+          session.baseRisk,
+        trades:
+          updatedTrades.map(
+            (item) => item.result
+          ),
+      });
+    const updatedSession: Session = {
+      ...session,
+      balance:
+        newBalance,
+      trades:
+        updatedTrades,
+      status:
+        nextRisk.shouldTrade
+          ? "active"
+          : "complete",
+    };
+    setSession(
+      updatedSession
+    );
+  }
+  /* =======================================================
+     Start New Session
+  ======================================================= */
+  function handleNewSession() {
+    setScreen("new");
+  }
+  /* =======================================================
+     Clear Current Session
+  ======================================================= */
+  function handleClearSession() {
+    clearSession();
+    setSession(null);
+    setScreen("dashboard");
+  }
+  /* =======================================================
+     Loading
+  ======================================================= */
+  if (!loaded) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[#07090d] text-white">
+        <div className="text-center">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white/10 border-t-emerald-400" />
+          <p className="mt-4 text-xs text-white/30">
+            جاري تحميل التطبيق...
+          </p>
+        </div>
+      </main>
+    );
+  }
+  /* =======================================================
+     Dashboard
+  ======================================================= */
+  if (screen === "dashboard") {
+    return (
+      <Dashboard
+        session={session}
+        onNewSession={
+          handleNewSession
+        }
+        onContinue={() =>
+          setScreen("active")
+        }
+        onHistory={() =>
+          setScreen("history")
+        }
+      />
+    );
+  }
+  /* =======================================================
+     New Session
+  ======================================================= */
+  if (screen === "new") {
+    return (
+      <NewSession
+        onBack={() =>
+          setScreen(
+            session
+              ? "active"
+              : "dashboard"
+          )
+        }
+        onCreate={
+          handleCreateSession
+        }
+      />
+    );
+  }
+  /* =======================================================
+     Trade History
+  ======================================================= */
+  if (screen === "history") {
+    return (
+      <TradeHistory
+        session={session}
+        onBack={() =>
+          setScreen(
+            session
+              ? "active"
+              : "dashboard"
+          )
+        }
+        onClear={
+          handleClearSession
+        }
+      />
+    );
+  }
+  /* =======================================================
+     Active Session
+  ======================================================= */
+  if (
+    screen === "active" &&
+    session &&
+    risk &&
+    lotCalculation
+  ) {
+    return (
+      <ActiveSession
+        session={
+          session
+        }
+        riskPct={
+          risk.currentRiskPercent
+        }
+        recommendation={{
+          lot:
+            lotCalculation.lot,
+          riskMoney:
+            lotCalculation.riskMoney,
+          potential:
+            lotCalculation.lot *
+            session.tp *
+            10,
+        }}
+        onBack={() =>
+          setScreen("dashboard")
+        }
+        onResult={
+          handleTradeResult
+        }
+        onHistory={() =>
+          setScreen("history")
+        }
+        onNewSession={
+          handleNewSession
+        }
+      />
+    );
+  }
+  /* =======================================================
+     Session exists but trading stopped
+     ======================================================= */
+  if (
+    screen === "active" &&
+    session &&
+    risk &&
+    !risk.shouldTrade
+  ) {
+    return (
+      <ActiveSession
+        session={{
+          ...session,
+          status: "complete",
+        }}
+        riskPct={
+          risk.currentRiskPercent
+        }
+        recommendation={{
+          lot: 0,
+          riskMoney: 0,
+          potential: 0,
+        }}
+        onBack={() =>
+          setScreen("dashboard")
+        }
+        onResult={() => {}}
+        onHistory={() =>
+          setScreen("history")
+        }
+        onNewSession={
+          handleNewSession
+        }
+      />
+    );
+  }
+  /* =======================================================
+     Fallback
+  ======================================================= */
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[#07090d] px-5 text-white">
+      <div className="w-full max-w-md rounded-3xl border border-white/[0.08] bg-[#0f1319] p-6 text-center">
+        <h1 className="text-lg font-black">
+          Forex Risk Manager
+        </h1>
+        <p className="mt-2 text-xs leading-5 text-white/35">
+          لا توجد جلسة تداول نشطة.
+        </p>
+        <button
+          type="button"
+          onClick={
+            handleNewSession
+          }
+          className="mt-5 h-12 w-full rounded-2xl bg-emerald-400 text-sm font-black text-black"
+        >
+          إنشاء جلسة جديدة
+        </button>
+      </div>
+    </main>
+  );
 }
-function Home({s,newSession,continueSession,history}:{s:Session|null;newSession:()=>void;continueSession:()=>void;history:()=>void}){return <div className="min-h-screen"><Header title="Smart Risk Manager"/><div className="px-5 pt-5"><div className="rounded-3xl border border-white/8 bg-[#111820] p-6"><div className="text-xs text-white/40">إدارة مخاطرة الفوركس</div><h1 className="mt-2 text-3xl font-black leading-tight">تداول بحجم<br/>مخاطرة محسوب.</h1><p className="mt-3 text-sm leading-6 text-white/45">احسب حجم اللوت وتابع هدف الجلسة وحد الخسارة.</p><button className="primary mt-6 w-full" onClick={newSession}><Plus size={18}/> ابدأ جلسة جديدة</button></div>{s&&<div className="card mt-4"><div className="text-xs text-white/40">الجلسة الحالية</div><div className="mt-3 text-3xl font-bold">${s.balance.toFixed(2)}</div><div className="mt-1 text-sm text-white/45">النتيجة: <b className={s.balance>=s.start?"text-emerald-400":"text-red-400"}>{s.balance>=s.start?"+":""}${(s.balance-s.start).toFixed(2)}</b></div><button className="secondary mt-5 w-full" onClick={s.status==="active"?continueSession:history}>{s.status==="active"?"متابعة الجلسة":"عرض الجلسة"}<ArrowLeft size={16}/></button></div>}<p className="pb-24 pt-6 text-center text-[10px] leading-5 text-white/25">أداة لإدارة المخاطر وليست توصية بالشراء أو البيع.</p></div><Nav history={history} onHome={()=>{}}/></div>}
-function Field({label,value,setValue,prefix}:{label:string;value:string;setValue:(v:string)=>void;prefix?:string}){return <label className="block"><span className="label block">{label}</span><div className="input">{prefix&&<span className="text-white/30">{prefix}</span>}<input inputMode="decimal" value={value} onChange={e=>setValue(e.target.value)}/></div></label>}
-function New(p:any){return <div className="min-h-screen"><Header title="جلسة جديدة" onBack={p.back}/><div className="space-y-4 px-5 pb-8"><div className="card"><Field label="رأس المال" value={p.balance} setValue={p.setBalance} prefix="$"/><div className="mt-4 grid grid-cols-2 gap-3"><Field label="الهدف اليومي" value={p.target} setValue={p.setTarget} prefix="$"/><Field label="أقصى خسارة" value={p.maxLoss} setValue={p.setMaxLoss} prefix="$"/></div></div><div className="card"><div className="label">المخاطرة الأساسية</div><div className="grid grid-cols-4 gap-2">{["0.5","1","2","3"].map(v=><button key={v} className={p.risk===v?"choice active":"choice"} onClick={()=>p.setRisk(v)}>{v}%</button>)}</div></div><div className="card"><div className="label">إعداد الصفقة</div><div className="input"><select value={p.pair} onChange={e=>p.setPair(e.target.value)}>{pairs.map(x=><option key={x}>{x}</option>)}</select><ChevronDown size={15}/></div><div className="mt-4 grid grid-cols-2 gap-3"><Field label="Stop Loss (pips)" value={p.sl} setValue={p.setSl}/><Field label="Take Profit (pips)" value={p.tp} setValue={p.setTp}/></div></div><button className="primary w-full" onClick={p.start}>إنشاء الجلسة <ArrowLeft size={17}/></button><p className="text-[10px] leading-5 text-white/30">الحسابات الأولى تستخدم قيمة Pip مبسطة لحساب USD. تحقق من مواصفات وسيطك قبل استخدام اللوت في حساب حقيقي.</p></div></div>}
-function Trade({s,rec,riskNow,profit,back,result,history,newSession}:{s:Session;rec:{lot:number;risk:number};riskNow:number;profit:number;back:()=>void;result:(r:"WIN"|"LOSS")=>void;history:()=>void;newSession:()=>void}){const progress=Math.min(100,Math.max(0,profit/s.target*100)),stopped=s.status==="complete",rr=s.tp/s.sl;return <div className="min-h-screen"><Header title="الجلسة الحالية" onBack={back}/><div className="px-5 pb-24"><div className="grid grid-cols-2 gap-3"><div className="card"><div className="label">الرصيد</div><div className="mt-2 text-2xl font-bold">${s.balance.toFixed(2)}</div></div><div className="card"><div className="label">النتيجة</div><div className={"mt-2 text-2xl font-bold "+(profit>=0?"text-emerald-400":"text-red-400")}>{profit>=0?"+":""}${profit.toFixed(2)}</div></div></div><div className="card mt-3"><div className="flex justify-between text-xs"><span className="text-white/45">الهدف</span><span>${Math.max(0,profit).toFixed(2)} / ${s.target.toFixed(2)}</span></div><div className="progress mt-3"><span style={{width:`${progress}%`}}/></div></div><div className="risk mt-4"><ShieldCheck className="text-emerald-400" size={22}/><div><b>{stopped?"توقف عن التداول":"المخاطرة الحالية: "+riskNow.toFixed(2)+"%"}</b><div className="mt-1 text-[10px] text-white/35">{stopped?"تم الوصول إلى هدف الجلسة أو حد الخسارة.":"المحرك يخفّض المخاطرة عند الحاجة."}</div></div></div><div className="hero mt-4"><div className="text-[10px] font-bold tracking-widest text-white/35">NEXT TRADE</div><div className="mt-2 text-6xl font-black">{stopped?"—":rec.lot.toFixed(2)}</div><div className="text-sm font-bold text-emerald-400">LOT</div><div className="mt-4 inline-block rounded-full bg-white/5 px-3 py-1 text-xs">{s.pair}</div><div className="mt-5 grid grid-cols-3 text-center"><div><div className="text-[10px] text-white/30">Risk</div><b>${rec.risk.toFixed(2)}</b></div><div><div className="text-[10px] text-white/30">SL</div><b>{s.sl} pips</b></div><div><div className="text-[10px] text-white/30">TP</div><b>{s.tp} pips</b></div></div><div className="mt-4 border-t border-white/8 pt-3 text-xs text-white/40">R:R <b className="text-white">1 : {rr.toFixed(2)}</b></div></div>{!stopped&&<div className="mt-4 grid grid-cols-2 gap-3"><button className="result win" onClick={()=>result("WIN")}><TrendingUp size={18} className="inline"/> WIN</button><button className="result loss" onClick={()=>result("LOSS")}><TrendingDown size={18} className="inline"/> LOSS</button></div>}<div className="mt-4 grid grid-cols-2 gap-3"><button className="secondary" onClick={history}><History size={16}/> السجل</button><button className="secondary" onClick={newSession}><Plus size={16}/> جلسة جديدة</button></div></div></div>}
-function Hist({s,back,clear}:{s:Session|null;back:()=>void;clear:()=>void}){return <div className="min-h-screen"><Header title="سجل الجلسة" onBack={back}/><div className="px-5 pb-10">{!s?<div className="empty">لا توجد جلسة محفوظة.</div>:<><div className="card"><div className="grid grid-cols-3 gap-2 text-center"><div><div className="label">البداية</div><b>${s.start.toFixed(0)}</b></div><div><div className="label">الحالي</div><b>${s.balance.toFixed(0)}</b></div><div><div className="label">الصفقات</div><b>{s.trades.length}</b></div></div></div><div className="mt-4 space-y-2">{s.trades.length?s.trades.map(t=><div className="row" key={t.id}><div className="flex items-center gap-3"><div className={"dot "+(t.result==="WIN"?"bg-emerald-400/10 text-emerald-400":"bg-red-400/10 text-red-400")}>{t.result==="WIN"?"↑":"↓"}</div><div><b>{t.pair}</b><div className="text-[10px] text-white/30">{t.lot.toFixed(2)} LOT · {t.time}</div></div></div><b className={t.pnl>=0?"text-emerald-400":"text-red-400"}>{t.pnl>=0?"+":""}${t.pnl.toFixed(2)}</b></div>):<div className="empty">لم تسجل أي صفقة بعد.</div>}</div><button className="mt-5 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-red-400/20 bg-red-400/5 text-red-400" onClick={clear}><X size={16}/> حذف الجلسة</button></>}</div></div>}
