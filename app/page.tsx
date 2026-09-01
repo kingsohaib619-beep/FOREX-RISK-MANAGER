@@ -189,20 +189,33 @@ return null;
   ) {
     return null;
   }
+  const sessionWithTrading =
+    session as Session & {
+      accountType?: AccountType;
+      payout?: number;
+      pipValuePerStandardLot?: number;
+      minLot?: number;
+      maxLot?: number;
+      lotStep?: number;
+    };
   const accountType =
-    (
-      session as Session & {
-        accountType?: AccountType;
-      }
-    ).accountType ??
+    sessionWithTrading.accountType ??
     "QT_REAL";
   const payout =
-    (
-      session as Session & {
-        payout?: number;
-      }
-    ).payout ??
+    sessionWithTrading.payout ??
     92;
+  const pipValue =
+    sessionWithTrading.pipValuePerStandardLot ??
+    10;
+  const minLot =
+    sessionWithTrading.minLot ??
+    0.01;
+  const maxLot =
+    sessionWithTrading.maxLot ??
+    100;
+  const lotStep =
+    sessionWithTrading.lotStep ??
+    0.01;
   return calculateTrading({
     accountType,
     balance:
@@ -215,13 +228,10 @@ return null;
     takeProfitPips:
       session.tp,
     pipValuePerStandardLot:
-      10,
-    minLot:
-      0.01,
-    maxLot:
-      100,
-    lotStep:
-      0.01,
+      pipValue,
+    minLot,
+    maxLot,
+    lotStep,
   });
 }, [
   session,
@@ -287,12 +297,16 @@ if (
 ) {
   return;
 }
+/* ---------------------------------------------
+   Payout validation only for
+   Pocket Option QT accounts
+--------------------------------------------- */
+const requiresPayout =
+  form.accountType === "QT_REAL" ||
+  form.accountType === "QT_DEMO" ||
+  form.accountType === "TOURNAMENT";
 if (
-  (
-    form.accountType === "QT_REAL" ||
-    form.accountType === "QT_DEMO" ||
-    form.accountType === "TOURNAMENT"
-  ) &&
+  requiresPayout &&
   (
     !Number.isFinite(payout) ||
     payout <= 0 ||
@@ -323,8 +337,7 @@ const newSession = {
   accountType:
     form.accountType,
   payout:
-    Number.isFinite(payout) &&
-    payout > 0
+    requiresPayout
       ? payout
       : 92,
   pipValuePerStandardLot:
@@ -385,13 +398,9 @@ if (
 ) {
   return;
 }
-/*
- * الخسارة = مبلغ المخاطرة.
- *
- * الربح:
- * QT = مبلغ الصفقة × Payout
- * Forex = TP × قيمة النقطة × اللوت
- */
+/* ---------------------------------------------
+   P/L
+--------------------------------------------- */
 const pnl =
   result === "WIN"
     ? tradingCalculation.potentialProfit
@@ -533,9 +542,9 @@ if (!session) {
 setScreen(
 “new”
 );
-return;
-}
 
+  return;
+}
 setScreen(
   "active"
 );
@@ -573,6 +582,7 @@ Loading
 
 if (!ready) {
 return (
+    <div className="text-center">
       <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white/10 border-t-emerald-400" />
       <p className="mt-4 text-xs text-white/30">
         جاري تحميل التطبيق...
@@ -758,21 +768,11 @@ screen === “active” &&
 session &&
 risk
 ) {
-/*
-* مهم:
-* ActiveSession يتوقع:
-*
-* potentialProfit
-*
-* وليس:
-*
-* potential
-*/
-
 const recommendation = {
-  lot:
-    tradingCalculation?.lot ??
-    0,
+lot:
+tradingCalculation?.lot ??
+0,
+
   riskMoney:
     tradingCalculation?.riskMoney ??
     0,
