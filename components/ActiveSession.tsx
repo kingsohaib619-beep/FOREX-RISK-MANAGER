@@ -8,6 +8,7 @@ import {
   TrendingDown,
   TrendingUp,
   CircleAlert,
+  Target,
 } from "lucide-react";
 
 import type {
@@ -68,6 +69,7 @@ export default function ActiveSession({
   onHistory,
   onNewSession,
 }: ActiveSessionProps) {
+
   /* =======================================================
      Session Calculations
   ======================================================= */
@@ -75,6 +77,12 @@ export default function ActiveSession({
   const profit =
     session.balance -
     session.startBalance;
+
+  const remainingTarget =
+    Math.max(
+      0,
+      session.target - profit
+    );
 
   const targetProgress =
     session.target > 0
@@ -126,6 +134,25 @@ export default function ActiveSession({
       : 0;
 
   /* =======================================================
+     Estimated Trades Remaining
+  ======================================================= */
+
+  const potentialProfit =
+    Math.max(
+      0,
+      recommendation.potentialProfit
+    );
+
+  const estimatedTradesRemaining =
+    remainingTarget > 0 &&
+    potentialProfit > 0
+      ? Math.ceil(
+          remainingTarget /
+            potentialProfit
+        )
+      : 0;
+
+  /* =======================================================
      UI
   ======================================================= */
 
@@ -134,6 +161,7 @@ export default function ActiveSession({
       dir="rtl"
       className="min-h-screen bg-[#07090d] text-white"
     >
+
       <div className="mx-auto min-h-screen max-w-md bg-[#0b0e13]">
 
         {/* =================================================
@@ -152,6 +180,7 @@ export default function ActiveSession({
           </button>
 
           <div className="text-center">
+
             <div className="text-[10px] font-bold tracking-[0.24em] text-emerald-400">
               FOREX RISK
             </div>
@@ -159,9 +188,11 @@ export default function ActiveSession({
             <h1 className="mt-1 text-base font-bold">
               التداول
             </h1>
+
           </div>
 
           <div className="w-10" />
+
         </header>
 
         <main className="px-5 pb-10">
@@ -174,7 +205,9 @@ export default function ActiveSession({
 
             <InfoCard
               label="الرصيد الحالي"
-              value={`$${session.balance.toFixed(2)}`}
+              value={`$${session.balance.toFixed(
+                2
+              )}`}
             />
 
             <InfoCard
@@ -220,12 +253,17 @@ export default function ActiveSession({
               <div className="text-right">
 
                 <div className="text-xs font-bold text-white/60">
-                  {targetProgress.toFixed(0)}%
+                  {targetProgress.toFixed(
+                    0
+                  )}
+                  %
                 </div>
 
                 <div className="mt-1 text-[10px] text-white/30">
                   هدف $
-                  {session.target.toFixed(2)}
+                  {session.target.toFixed(
+                    2
+                  )}
                 </div>
 
               </div>
@@ -247,15 +285,93 @@ export default function ActiveSession({
 
               {targetReached
                 ? "🏆 تم الوصول إلى الهدف اليومي."
-                : `متبقي $${Math.max(
-                    0,
-                    session.target -
-                      profit
-                  ).toFixed(2)}`}
+                : `متبقي $${remainingTarget.toFixed(
+                    2
+                  )}`}
 
             </div>
 
           </section>
+
+          {/* =================================================
+              Estimated Trades Remaining
+          ================================================= */}
+
+          {!targetReached &&
+            !maxLossReached &&
+            session.target > 0 && (
+              <section className="mt-4 rounded-[24px] border border-emerald-400/10 bg-emerald-400/[0.04] p-5">
+
+                <div className="flex items-center gap-3">
+
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-400/10">
+
+                    <Target
+                      size={19}
+                      className="text-emerald-400"
+                    />
+
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+
+                    <div className="flex items-center justify-between">
+
+                      <span className="text-sm font-bold">
+                        الصفقات المتبقية للهدف
+                      </span>
+
+                      <span className="text-2xl font-black text-emerald-400">
+                        {estimatedTradesRemaining}
+                      </span>
+
+                    </div>
+
+                    <div className="mt-1 text-[10px] leading-5 text-white/30">
+                      عدد تقديري بناءً على الربح المتوقع
+                      للصفقة الحالية
+                    </div>
+
+                  </div>
+
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2">
+
+                  <div className="rounded-xl bg-white/[0.025] p-3">
+
+                    <div className="text-[9px] text-white/25">
+                      المتبقي للهدف
+                    </div>
+
+                    <div className="mt-1 text-sm font-bold">
+                      $
+                      {remainingTarget.toFixed(
+                        2
+                      )}
+                    </div>
+
+                  </div>
+
+                  <div className="rounded-xl bg-white/[0.025] p-3">
+
+                    <div className="text-[9px] text-white/25">
+                      الربح المتوقع
+                    </div>
+
+                    <div className="mt-1 text-sm font-bold text-emerald-400">
+                      +$
+                      {potentialProfit.toFixed(
+                        2
+                      )}
+                    </div>
+
+                  </div>
+
+                </div>
+
+              </section>
+            )}
 
           {/* =================================================
               Risk Protection
@@ -283,7 +399,8 @@ export default function ActiveSession({
                   </span>
 
                   <span className="text-sm font-black text-emerald-400">
-                    {riskPct.toFixed(2)}%
+                    {riskPct.toFixed(2)}
+                    %
                   </span>
 
                 </div>
@@ -307,9 +424,12 @@ export default function ActiveSession({
                 </span>
 
                 <span className="text-white/45">
-                  ${lossUsed.toFixed(2)}
+                  $
+                  {lossUsed.toFixed(2)}
                   {" / $"}
-                  {session.maxLoss.toFixed(2)}
+                  {session.maxLoss.toFixed(
+                    2
+                  )}
                 </span>
 
               </div>
@@ -379,7 +499,9 @@ export default function ActiveSession({
 
                 <div className="mt-3 text-6xl font-black tracking-tight">
 
-                  {recommendation.lot.toFixed(2)}
+                  {recommendation.lot.toFixed(
+                    2
+                  )}
 
                 </div>
 
@@ -430,7 +552,9 @@ export default function ActiveSession({
 
                     <span className="font-bold">
                       1 :{" "}
-                      {riskReward.toFixed(2)}
+                      {riskReward.toFixed(
+                        2
+                      )}
                     </span>
 
                   </div>
@@ -637,15 +761,17 @@ export default function ActiveSession({
 
           <p className="mt-6 text-center text-[10px] leading-5 text-white/20">
 
-            حجم اللوت المحسوب هو أداة لإدارة المخاطر
-            فقط، ولا يمثل توصية بالدخول في الصفقة
-            ولا يضمن الربح.
+            عدد الصفقات المتبقية تقديري ويعتمد على
+            الربح المتوقع للصفقة الحالية. لا يضمن
+            الوصول إلى الهدف، كما أن حجم اللوت أداة
+            لإدارة المخاطر وليس توصية تداول.
 
           </p>
 
         </main>
 
       </div>
+
     </div>
   );
 }
